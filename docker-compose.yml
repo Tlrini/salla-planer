@@ -1,0 +1,16 @@
+services:
+  salla:
+    build: .
+    image: salla-planner:latest
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      # Only used on the very first start, to create the first administrator.
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (see .env.example)}
+      # Set to "true" only when the app is served over HTTPS.
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+    volumes:
+      # app.db, uploads/ (GLB models) and backups/ live here.
+      - ./data:/app/data

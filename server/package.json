@@ -1,0 +1,27 @@
+{
+  "name": "@salla/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --conditions=source src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.1.5",
+    "@fastify/multipart": "10.1.7",
+    "@fastify/static": "10.1.10",
+    "@salla/shared": "0.1.0",
+    "bcrypt": "6.0.0",
+    "better-sqlite3": "13.0.3",
+    "fastify": "5.12.8",
+    "nanoid": "5.1.6"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "6.0.0",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15"
+  }
+}

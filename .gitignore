@@ -1,0 +1,10 @@
+*.tsbuildinfo
+.env
+coverage/
+data/
+dist/
+e2e/.data/
+node_modules/
+playwright-report/
+test-results/
+.claude/settings.local.json

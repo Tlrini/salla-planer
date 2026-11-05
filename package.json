@@ -1,0 +1,36 @@
+{
+  "name": "salla-planner",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run build -w shared && concurrently -k -n shared,server,web -c gray,blue,magenta \"npm:dev -w shared\" \"npm:dev -w server\" \"npm:dev -w web\"",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "start": "node --env-file-if-exists=.env server/dist/index.js --production",
+    "e2e": "npm run build && playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.65.0",
+    "concurrently": "10.0.6",
+    "eslint": "9.39.5",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "16.5.0",
+    "prettier": "3.9.10",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "3.2.7"
+  }
+}
