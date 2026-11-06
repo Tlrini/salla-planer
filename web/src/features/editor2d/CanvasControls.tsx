@@ -1,4 +1,14 @@
-import { Hand, Magnet, Maximize2, Minus, Plus, SquareDashedMousePointer } from 'lucide-react';
+import {
+  Hand,
+  Magnet,
+  Maximize2,
+  Minus,
+  Plus,
+  Ruler,
+  SquareDashed,
+  SquareDashedMousePointer,
+  Type,
+} from 'lucide-react';
 import { sq } from '../../i18n/sq';
 import { useUi } from '../../model/ui';
 
@@ -12,6 +22,12 @@ export function CanvasControls({ onZoomIn, onZoomOut, onFit }: Props) {
   const snap = useUi((s) => s.snap);
   const mode = useUi((s) => s.mode);
   const set = useUi((s) => s.set);
+  const tool = useUi((s) => s.annotateTool);
+  const tools = [
+    { id: 'measure' as const, label: sq.annotate.measure, icon: Ruler },
+    { id: 'text' as const, label: sq.annotate.text, icon: Type },
+    { id: 'zone' as const, label: sq.annotate.zone, icon: SquareDashed },
+  ];
   return (
     <div className="canvas-controls" role="toolbar">
       <div className="control-group">
@@ -69,6 +85,21 @@ export function CanvasControls({ onZoomIn, onZoomOut, onFit }: Props) {
           <Magnet size={18} />
           <span>{sq.canvas.snap}</span>
         </button>
+      </div>
+      <div className="control-group" aria-label={sq.annotate.tools}>
+        {tools.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className="icon-btn"
+            aria-pressed={tool === id}
+            onClick={() => set({ annotateTool: tool === id ? null : id, calibrating: false })}
+            title={label}
+            aria-label={label}
+          >
+            <Icon size={20} />
+          </button>
+        ))}
       </div>
     </div>
   );

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { pleatTexture } from './textures';
 
 /**
  * Shared geometries and materials. Everything here is created once and reused by every
@@ -50,7 +51,12 @@ export function mat(kind: MatKind, color: string, intensity = 1): THREE.MeshStan
   let m: THREE.MeshStandardMaterial;
   switch (kind) {
     case 'cloth':
-      m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.92, metalness: 0 });
+      // Real white fabric reflects ~80% of light; pure white clips to a flat, shapeless white.
+      m = new THREE.MeshStandardMaterial({
+        color: c.clone().multiplyScalar(0.84),
+        roughness: 0.92,
+        metalness: 0,
+      });
       break;
     case 'wood':
       m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0 });
@@ -114,3 +120,28 @@ export function sided(kind: MatKind, color: string): THREE.MeshStandardMaterial 
 export const LEAF = '#5F7F4F';
 export const GOLD = '#C9A44C';
 export const WARM_LIGHT = '#FFD39A';
+
+/** Tablecloth skirt: cloth with soft vertical folds. */
+export function drape(color: string): THREE.MeshStandardMaterial {
+  const key = `drape|${color}`;
+  const hit = mats.get(key);
+  if (hit) return hit as THREE.MeshStandardMaterial;
+  const m = mat('cloth', color).clone();
+  m.bumpMap = pleatTexture();
+  m.bumpScale = 14;
+  mats.set(key, m);
+  return m;
+}
+
+/** Per-face materials for a draped cylinder: folds on the side, plain top and bottom caps. */
+export function drapedCylinder(color: string): THREE.Material[] {
+  const plain = mat('cloth', color);
+  return [drape(color), plain, plain];
+}
+
+/** Per-face materials for a draped box (+x, -x, +y, -y, +z, -z): folds on the four sides. */
+export function drapedBox(color: string): THREE.Material[] {
+  const side = drape(color);
+  const plain = mat('cloth', color);
+  return [side, side, plain, plain, side, side];
+}

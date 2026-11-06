@@ -171,11 +171,16 @@ const LAYERED_TYPES = new Set([
   'candle_group',
 ]);
 
+/** Floor-level, overhead or table-top items: never "overlapping" and never blocking placement. */
+function isLayered(item: Pick<Item, 'type'>, catalog: CatalogMap): boolean {
+  return LAYERED_TYPES.has(item.type) || isTabletop(catalog.get(item.type));
+}
+
 export function overlappingPairs(
   items: readonly Item[],
   catalog: CatalogMap,
 ): Array<[string, string]> {
-  const solid = items.filter((i) => !LAYERED_TYPES.has(i.type));
+  const solid = items.filter((i) => !isLayered(i, catalog));
   const boxes = solid.map((i) => footprintBox(i, catalog.get(i.type)));
   const pairs: Array<[string, string]> = [];
   for (let a = 0; a < solid.length; a++) {
@@ -203,9 +208,9 @@ export function findFreeSpot(
   const place = (x: number, y: number) => clampToHall({ ...draft, x, y }, hall, cat);
   // Tables keep a walkable aisle to everything else; other items just must not touch.
   const gap = hasChairs(cat) ? MIN_AISLE : 0.05;
-  if (LAYERED_TYPES.has(draft.type)) return place(at.x, at.y);
+  if (isLayered(draft, catalog)) return place(at.x, at.y);
   const others = items
-    .filter((i) => !LAYERED_TYPES.has(i.type))
+    .filter((i) => !isLayered(i, catalog))
     .map((i) => footprintBox(i, catalog.get(i.type)));
   const free = (p: { x: number; y: number }) => {
     const box = footprintBox({ ...draft, ...p }, cat);
@@ -276,7 +281,8 @@ export function summarize(items: readonly Item[], catalog: readonly CatalogItem[
   const counts = new Map<string, number>();
   let autoChairs = 0;
   let capacity = 0;
-  for (const item of items) {
+  // Decor standing on tables (Item.tableDecor) is priced like any other item.
+  for (const item of [...items, ...tableDecorItems(items, byId)]) {
     const cat = byId.get(item.type);
     counts.set(item.type, (counts.get(item.type) ?? 0) + 1);
     const seats = seatCount(item, cat);
@@ -320,19 +326,28 @@ export function pointInItem(px: number, py: number, item: Item, cat?: CatalogIte
   return Math.abs(lx) <= hw && Math.abs(ly) <= hd;
 }
 
-/** Items that sit on a table top when placed over a table. */
+/** Built-in items that sit on a table top when placed over a table. */
 export const TABLETOP_TYPES = new Set(['centerpiece', 'candle_group']);
+
+/**
+ * Can this catalog item stand on a table? Library decor sets `tabletop`; databases seeded
+ * before that flag existed fall back to the built-in list.
+ */
+export function isTabletop(cat: CatalogItem | undefined): boolean {
+  if (!cat) return false;
+  return cat.tabletop ?? TABLETOP_TYPES.has(cat.id);
+}
 
 /**
  * Height (m) an item stands on: the top of the table under it for table-top items,
  * otherwise the floor (0).
  */
 export function supportHeight(item: Item, items: readonly Item[], catalog: CatalogMap): number {
-  if (!TABLETOP_TYPES.has(item.type)) return 0;
+  if (!isTabletop(catalog.get(item.type))) return 0;
   for (const other of items) {
     if (other.id === item.id) continue;
     const cat = catalog.get(other.type);
-    if (cat?.category !== 'tables' || TABLETOP_TYPES.has(other.type)) continue;
+    if (cat?.category !== 'tables' || isTabletop(cat)) continue;
     if (other.type === 'chair' || other.type === 'lounge_sofa') continue;
     if (pointInItem(item.x, item.y, other, cat)) return other.height ?? cat.height;
   }
@@ -407,7 +422,7 @@ export function autoLayoutTables(
   const y0 = (hall.length - gridL) / 2 + fd / 2;
 
   const obstacles = [...items, ...hall.structure]
-    .filter((i) => !NON_BLOCKING.has(i.type))
+    .filter((i) => !NON_BLOCKING.has(i.type) && !isTabletop(catalog.get(i.type)))
     .map((i) => {
       const b = footprintBox(i, catalog.get(i.type));
       return {
@@ -471,4 +486,296 @@ export function layoutWarnings(
     if (capacity < guestTarget) out.push({ kind: 'seats', missing: guestTarget - capacity });
   }
   return out;
+}
+
+/** Natural size of an uploaded model's bounding box, in the model's own units. */
+export interface ModelBox {
+  x: number;
+  y: number;
+  z: number;
+}
+
+/**
+ * Real-world size of a scanned model shown at `height` meters, keeping its proportions:
+ * width along x, depth along z (3D) = plan y. Returns zeros for an empty box.
+ */
+export function uniformModelSize(box: ModelBox, height: number) {
+  if (!(box.y > 0) || !(height > 0)) return { width: 0, depth: 0, height: 0 };
+  const s = height / box.y;
+  return { width: round6(box.x * s), depth: round6(box.z * s), height: round6(height) };
+}
+
+/** Spacing of table decor along long tables: about one piece every 2 m. */
+export const DECOR_SPACING = 2;
+
+/** Can this item carry table decor (Item.tableDecor)? Tables with seats do. */
+export function acceptsTableDecor(cat: CatalogItem | undefined): boolean {
+  return hasChairs(cat);
+}
+
+/**
+ * Where the decor of a table stands, in the table's local frame: the center of a round table,
+ * or evenly along a long table (one piece per ~2 m).
+ */
+export function decorPositions(
+  table: Item,
+  cat: CatalogItem | undefined,
+): Array<{ x: number; y: number }> {
+  if (!acceptsTableDecor(cat)) return [];
+  if (cat?.shape2d === 'circle') return [{ x: 0, y: 0 }];
+  const n = Math.max(1, Math.round(table.width / DECOR_SPACING));
+  return spread(n, table.width).map((x) => ({ x: round6(x), y: 0 }));
+}
+
+/**
+ * The decor on tables as plain items (ids "<table id>~decor~<n>"), so the 3D view, the summary
+ * and the PDF treat them like any placed item. Unknown or inactive decor ids are skipped.
+ */
+export function tableDecorItems(items: readonly Item[], catalog: CatalogMap): Item[] {
+  const out: Item[] = [];
+  for (const table of items) {
+    if (!table.tableDecor) continue;
+    const decor = catalog.get(table.tableDecor);
+    const cat = catalog.get(table.type);
+    if (!decor) continue;
+    decorPositions(table, cat).forEach((p, n) => {
+      const w = localToWorld(table, p);
+      out.push({
+        id: `${table.id}~decor~${n}`,
+        type: decor.id,
+        x: round6(w.x),
+        y: round6(w.y),
+        rotation: table.rotation,
+        width: decor.width,
+        depth: decor.depth,
+        color: decor.defaultColor,
+        ...(decor.defaultColor2 ? { color2: decor.defaultColor2 } : {}),
+      });
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Walking through the hall at eye level (Beta 3, "Ec nëpër sallë")
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+/** Half the width of a person: distance kept from furniture (m). */
+export const WALK_RADIUS = 0.25;
+/** Distance kept from the walls (m). */
+export const WALL_MARGIN = 0.35;
+/** Floor-level or wall-mounted items one can walk over or past. */
+const WALK_THROUGH = new Set(['uplight', 'door', 'window']);
+
+export interface WalkArea {
+  width: number;
+  length: number;
+  /** Footprints (tables include their chairs) grown by the walking radius. */
+  obstacles: Box[];
+}
+
+/** The walkable floor of a hall: walls, furniture and columns block, floors/decor don't. */
+export function walkArea(
+  hall: Pick<Hall, 'width' | 'length' | 'structure'>,
+  items: readonly Item[],
+  catalog: CatalogMap,
+  radius = WALK_RADIUS,
+): WalkArea {
+  const obstacles = [...items, ...hall.structure]
+    .filter((i) => !WALK_THROUGH.has(i.type) && !isLayered(i, catalog))
+    .map((i) => {
+      const b = footprintBox(i, catalog.get(i.type));
+      return {
+        minX: b.minX - radius,
+        minY: b.minY - radius,
+        maxX: b.maxX + radius,
+        maxY: b.maxY + radius,
+      };
+    });
+  return { width: hall.width, length: hall.length, obstacles };
+}
+
+const inside = (p: Point, b: Box) => p.x > b.minX && p.x < b.maxX && p.y > b.minY && p.y < b.maxY;
+
+export function isWalkable(p: Point, area: WalkArea): boolean {
+  if (p.x < WALL_MARGIN || p.y < WALL_MARGIN) return false;
+  if (p.x > area.width - WALL_MARGIN || p.y > area.length - WALL_MARGIN) return false;
+  return !area.obstacles.some((b) => inside(p, b));
+}
+
+/**
+ * The walkable point nearest to a tapped spot: kept off the walls, and pushed out of furniture
+ * to the closest side. Null when no free spot is near (e.g. a hall packed wall to wall).
+ */
+export function walkTarget(p: Point, area: WalkArea): Point | null {
+  const clampWalls = (q: Point): Point => ({
+    x: Math.min(area.width - WALL_MARGIN, Math.max(WALL_MARGIN, q.x)),
+    y: Math.min(area.length - WALL_MARGIN, Math.max(WALL_MARGIN, q.y)),
+  });
+  let q = clampWalls(p);
+  for (let round = 0; round < 6; round++) {
+    const hit = area.obstacles.find((b) => inside(q, b));
+    if (!hit) return { x: round6(q.x), y: round6(q.y) };
+    const eps = 0.01;
+    const options: Point[] = [
+      { x: hit.minX - eps, y: q.y },
+      { x: hit.maxX + eps, y: q.y },
+      { x: q.x, y: hit.minY - eps },
+      { x: q.x, y: hit.maxY + eps },
+    ]
+      .map(clampWalls)
+      .sort((a, b) => Math.hypot(a.x - q.x, a.y - q.y) - Math.hypot(b.x - q.x, b.y - q.y));
+    q = options.find((o) => isWalkable(o, area)) ?? options[0]!;
+  }
+  return isWalkable(q, area) ? { x: round6(q.x), y: round6(q.y) } : null;
+}
+
+/** True when the straight walk from `a` to `b` stays on free floor (sampled every `step` m). */
+export function isPathClear(a: Point, b: Point, area: WalkArea, step = 0.1): boolean {
+  const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step));
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    if (!isWalkable({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, area)) return false;
+  }
+  return true;
+}
+
+/**
+ * One step of free walking (keyboard): move if the new spot is free, otherwise slide along
+ * the wall or table edge (move along one axis only), otherwise stay.
+ */
+export function walkStep(from: Point, to: Point, area: WalkArea): Point {
+  if (isWalkable(to, area)) return to;
+  const slideX = { x: to.x, y: from.y };
+  if (isWalkable(slideX, area)) return slideX;
+  const slideY = { x: from.x, y: to.y };
+  if (isWalkable(slideY, area)) return slideY;
+  return from;
+}
+
+/** Normalize a yaw angle to [0, 360). */
+export function yawWrap(deg: number): number {
+  return ((deg % 360) + 360) % 360;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Quote totals
+
+export interface QuoteTotals {
+  /** Catalog total of the decor. */
+  subtotal: number;
+  discountPercent: number;
+  /** Discount amount (positive number, subtracted). */
+  discount: number;
+  /** Extra services with a label and a non-zero amount. */
+  extras: Array<{ label: string; amount: number }>;
+  total: number;
+}
+
+const cents = (v: number) => Math.round(v * 100) / 100;
+
+/** Final quote: decor total minus the discount, plus extra services. */
+export function quoteTotals(
+  subtotal: number,
+  pricing: { discountPercent?: number; extras?: Array<{ label: string; amount: number }> } = {},
+): QuoteTotals {
+  const discountPercent = Math.min(100, Math.max(0, pricing.discountPercent ?? 0));
+  const discount = cents((subtotal * discountPercent) / 100);
+  const extras = (pricing.extras ?? [])
+    .filter((e) => e.amount !== 0)
+    .map((e) => ({ label: e.label.trim(), amount: cents(e.amount) }));
+  const total = cents(subtotal - discount + extras.reduce((sum, e) => sum + e.amount, 0));
+  return { subtotal: cents(subtotal), discountPercent, discount, extras, total };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Inventory: what a layout needs vs. what the agency owns
+
+/** Pieces of each catalog type a layout uses (auto chairs and table decor included). */
+export function usageOf(
+  items: readonly Item[],
+  catalog: readonly CatalogItem[],
+): Map<string, number> {
+  return new Map(summarize(items, catalog).lines.map((l) => [l.type, l.quantity]));
+}
+
+/** Add usages together (e.g. all confirmed events on one date). */
+export function addUsage(
+  ...usages: ReadonlyArray<ReadonlyMap<string, number>>
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const u of usages) for (const [k, v] of u) out.set(k, (out.get(k) ?? 0) + v);
+  return out;
+}
+
+export interface Shortage {
+  type: string;
+  name: string;
+  stock: number;
+  /** Needed by this layout / event. */
+  need: number;
+  /** Already taken by other events the same day. */
+  taken: number;
+  missing: number;
+}
+
+/** Items whose stock is not enough for `need` plus what other events already take. */
+export function shortages(
+  need: ReadonlyMap<string, number>,
+  taken: ReadonlyMap<string, number>,
+  catalog: CatalogMap,
+): Shortage[] {
+  const out: Shortage[] = [];
+  for (const [type, n] of need) {
+    const cat = catalog.get(type);
+    if (!cat || cat.stock === undefined || n <= 0) continue;
+    const t = taken.get(type) ?? 0;
+    const missing = n + t - cat.stock;
+    if (missing > 0)
+      out.push({ type, name: cat.name, stock: cat.stock, need: n, taken: t, missing });
+  }
+  return out.sort((a, b) => b.missing - a.missing);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Money: quote total, deposit, payments
+
+export interface Finance {
+  /** Final quote total (decor − discount + services). */
+  total: number;
+  /** Deposit asked at signing (pricing.depositPercent of the total). */
+  deposit: number;
+  paid: number;
+  /** What the client still owes (never negative). */
+  balance: number;
+  /** Paid share of the total, 0–1. */
+  paidShare: number;
+}
+
+export function projectFinance(
+  items: readonly Item[],
+  pricing:
+    | {
+        discountPercent?: number;
+        depositPercent?: number;
+        extras?: Array<{ label: string; amount: number }>;
+      }
+    | undefined,
+  payments: ReadonlyArray<{ amount: number }> | undefined,
+  catalog: readonly CatalogItem[],
+): Finance {
+  const total = quoteTotals(summarize(items, catalog).total, pricing).total;
+  const paid = cents((payments ?? []).reduce((s, p) => s + p.amount, 0));
+  const deposit = cents((total * (pricing?.depositPercent ?? 0)) / 100);
+  return {
+    total,
+    deposit,
+    paid,
+    balance: Math.max(0, cents(total - paid)),
+    paidShare: total > 0 ? Math.min(1, paid / total) : paid > 0 ? 1 : 0,
+  };
 }

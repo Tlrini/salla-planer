@@ -1,4 +1,4 @@
-import { geo, mat } from '../resources';
+import { drapedBox, geo, mat } from '../resources';
 import { heightOf, type BuilderProps } from './types';
 
 /** Rectangular / imperial / head table: draped box to the floor with a runner in color2. */
@@ -9,7 +9,7 @@ export function TableRect({ item, cat }: BuilderProps) {
     <group>
       <mesh
         geometry={g.box}
-        material={mat('cloth', item.color)}
+        material={drapedBox(item.color)}
         position={[0, h / 2, 0]}
         scale={[item.width + 0.06, h, item.depth + 0.06]}
         castShadow

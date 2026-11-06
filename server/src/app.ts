@@ -11,6 +11,10 @@ import type { AppConfig } from './config.js';
 import { openDb, type DB } from './db.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
 import { registerHallRoutes } from './routes/halls.js';
+import { registerImageRoutes } from './routes/images.js';
+import { registerLibraryRoutes } from './routes/library.js';
+import { registerPlanningRoutes } from './routes/planning.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { registerProjectRoutes } from './routes/projects.js';
 import { registerUploadRoutes } from './routes/uploads.js';
 import { registerUserRoutes } from './routes/users.js';
@@ -24,7 +28,11 @@ export interface BuiltApp {
 }
 
 export async function buildApp(config: AppConfig): Promise<BuiltApp> {
-  const app = Fastify({ logger: config.logger, bodyLimit: 10 * 1024 * 1024, trustProxy: true });
+  const app = Fastify({
+    logger: config.logger,
+    bodyLimit: 10 * 1024 * 1024,
+    trustProxy: config.trustProxy ?? false,
+  });
   const db = openDb(config.dbPath);
   seed(db, {
     adminUser: config.adminUser,
@@ -38,10 +46,14 @@ export async function buildApp(config: AppConfig): Promise<BuiltApp> {
 
   app.get('/api/health', async () => ({ ok: true }));
   registerAuth(app, db, config.secureCookies);
-  registerProjectRoutes(app, db);
+  registerProjectRoutes(app, db, config.dataDir);
   registerHallRoutes(app, db);
   registerCatalogRoutes(app, db);
   registerUploadRoutes(app, db, config.dataDir);
+  registerLibraryRoutes(app, db, config.dataDir);
+  registerImageRoutes(app, config.dataDir);
+  registerPlanningRoutes(app, db);
+  registerSettingsRoutes(app, db);
   registerUserRoutes(app, db);
 
   // Uploaded GLB models.

@@ -1,5 +1,6 @@
 import { Copy, Lock, LockOpen, RotateCcw, RotateCw, Trash, X } from 'lucide-react';
 import {
+  acceptsTableDecor,
   autoLabels,
   formatEUR,
   formatMeters,
@@ -11,6 +12,7 @@ import {
 import { sq } from '../../i18n/sq';
 import { catalogMap, useEditor } from '../../model/store';
 import { ColorField, NumberField, TextField } from './fields';
+import { TableDecorPicker } from './TableDecorPicker';
 
 function Actions({ ids, locked }: { ids: string[]; locked: boolean }) {
   const s = useEditor.getState;
@@ -153,6 +155,7 @@ function SingleItem({ item }: { item: Item }) {
           onChange={(c) => update({ color2: c })}
         />
       )}
+      {acceptsTableDecor(cat) && !item.locked && <TableDecorPicker tables={[item]} />}
     </>
   );
 }
@@ -170,6 +173,8 @@ function MultiItems({ items }: { items: Item[] }) {
   const ids = items.map((i) => i.id);
   const allLocked = items.every((i) => i.locked);
   const first = items[0]!;
+  // Decor can be set on all selected tables at once.
+  const tables = items.filter((i) => !i.locked && acceptsTableDecor(catalogMap.get(i.type)));
   return (
     <>
       <div className="panel-heading">
@@ -192,6 +197,7 @@ function MultiItems({ items }: { items: Item[] }) {
           useEditor.getState().updateItems(Object.fromEntries(ids.map((id) => [id, { color: c }])))
         }
       />
+      {tables.length > 0 && <TableDecorPicker tables={tables} />}
     </>
   );
 }

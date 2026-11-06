@@ -4,6 +4,18 @@ const SIZE = 40;
 
 /** Small top-view icon drawn from the catalog geometry (same look as the blueprint). */
 export function CatalogIcon({ cat }: { cat: CatalogItem }) {
+  // Scanned decor shows its rendered photo-like thumbnail.
+  if (cat.thumbnail)
+    return (
+      <img
+        className="catalog-icon catalog-thumb"
+        src={cat.thumbnail}
+        width={SIZE}
+        height={SIZE}
+        alt=""
+        loading="lazy"
+      />
+    );
   const pseudo: Item = {
     id: 'icon',
     type: cat.id,

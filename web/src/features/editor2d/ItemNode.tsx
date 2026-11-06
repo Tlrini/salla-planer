@@ -1,8 +1,9 @@
 import { memo } from 'react';
-import { Circle, Group, Rect, Text } from 'react-konva';
+import { Circle, Group, Image as KonvaImage, Rect, Text } from 'react-konva';
 import type Konva from 'konva';
-import { chairPositions, type CatalogItem, type Item } from '@salla/shared';
+import { chairPositions, decorPositions, type CatalogItem, type Item } from '@salla/shared';
 import { BLUEPRINT, CM, FONT_UI, hexToRgba } from './units';
+import { useLoadedImage } from './images';
 
 interface Props {
   item: Item;
@@ -10,6 +11,10 @@ interface Props {
   selected: boolean;
   /** Label to draw in the center (user label or automatic T1, T2…). */
   label: string | undefined;
+  /** Catalog item of the decor standing on this table (Item.tableDecor). */
+  decor?: CatalogItem | undefined;
+  /** A separately placed table-top item stands on this table: move the label out of its way. */
+  decorated?: boolean;
   showName: boolean;
   dragBoundFunc: (this: Konva.Node, pos: Konva.Vector2d) => Konva.Vector2d;
   onPointerDown: (e: Konva.KonvaEventObject<PointerEvent>, id: string) => void;
@@ -54,11 +59,58 @@ function Chairs({ item, cat }: { item: Item; cat: CatalogItem | undefined }) {
   );
 }
 
+/** Decor pieces on a table, drawn from their rendered top view (or as a small soft disc). */
+function TableDecor({
+  item,
+  cat,
+  decor,
+  image,
+}: {
+  item: Item;
+  cat: CatalogItem | undefined;
+  decor: CatalogItem;
+  image: HTMLImageElement | undefined;
+}) {
+  const span = Math.max(decor.width, decor.depth) * CM;
+  return (
+    <>
+      {decorPositions(item, cat).map((p, i) =>
+        image ? (
+          <KonvaImage
+            key={i}
+            image={image}
+            x={p.x * CM - span / 2}
+            y={p.y * CM - span / 2}
+            width={span}
+            height={span}
+            listening={false}
+            perfectDrawEnabled={false}
+          />
+        ) : (
+          <Circle
+            key={i}
+            x={p.x * CM}
+            y={p.y * CM}
+            radius={(decor.width * CM) / 2}
+            fill={hexToRgba(decor.defaultColor, 0.7)}
+            stroke={BLUEPRINT.lineSoft}
+            strokeWidth={1}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+        ),
+      )}
+    </>
+  );
+}
+
 function ItemNodeImpl({
   item,
   cat,
   selected,
   label,
+  decor,
+  decorated,
   showName,
   dragBoundFunc,
   onPointerDown,
@@ -69,16 +121,24 @@ function ItemNodeImpl({
   const d = item.depth * CM;
   const stroke = selected ? BLUEPRINT.selection : BLUEPRINT.line;
   const strokeWidth = selected ? 2.5 : 1.5;
-  const fill = hexToRgba(item.color, item.type === 'chandelier' ? 0.25 : 0.4);
+  // Scanned decor: its rendered top view replaces the flat color fill.
+  const topView = useLoadedImage(cat?.topView);
+  const fill = topView
+    ? hexToRgba(item.color, 0.08)
+    : hexToRgba(item.color, item.type === 'chandelier' ? 0.25 : 0.4);
   const dash = item.locked ? [10, 6] : undefined;
   const text = label ?? (showName ? cat?.name : undefined);
   const fontSize = label
-    ? Math.max(18, Math.min(w, d) * 0.3)
+    ? Math.max(18, Math.min(w, d) * (decor || decorated ? 0.2 : 0.3))
     : Math.max(14, Math.min(w, d, 400) * 0.14);
   // Text is counter-rotated to stay upright; keep its box inside the item so the
   // transformer bounds match the item itself.
   const upright = Math.round(item.rotation) % 180 === 0;
   const textWidth = (upright ? w : Math.min(w, d)) * 0.92;
+  // Decor on the table sits in the middle; the label moves below it (still on the table).
+  const decorImg = useLoadedImage(decor?.topView);
+  const hasDecor = !!decor || !!decorated;
+  const labelShift = hasDecor && label ? Math.min(w, d) * 0.3 : 0;
 
   const shape =
     cat?.shape2d === 'circle' ? (
@@ -121,9 +181,22 @@ function ItemNodeImpl({
       onTap={(e) => onTap(e, item.id)}
     >
       <Chairs item={item} cat={cat} />
+      {topView && (
+        // The top view covers a max(width, depth) square around the center (see renderModel).
+        <KonvaImage
+          image={topView}
+          x={-Math.max(w, d) / 2}
+          y={-Math.max(w, d) / 2}
+          width={Math.max(w, d)}
+          height={Math.max(w, d)}
+          listening={false}
+          perfectDrawEnabled={false}
+        />
+      )}
       {shape}
+      {decor && <TableDecor item={item} cat={cat} decor={decor} image={decorImg} />}
       {text ? (
-        <Group rotation={-item.rotation} listening={false}>
+        <Group y={labelShift} rotation={-item.rotation} listening={false}>
           <Text
             text={text}
             width={textWidth}

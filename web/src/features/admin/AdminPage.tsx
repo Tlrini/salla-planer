@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { sq } from '../../i18n/sq';
 import { useSession } from '../../model/session';
 import { AppShell } from '../shell/AppShell';
+import { AgencyAdmin } from './AgencyAdmin';
 import { CatalogAdmin } from './CatalogAdmin';
 import { UsersAdmin } from './UsersAdmin';
 
 export function AdminPage() {
   const user = useSession((s) => s.user);
-  const [tab, setTab] = useState<'catalog' | 'users'>('catalog');
+  const [tab, setTab] = useState<'catalog' | 'users' | 'agency'>('catalog');
   if (user?.role !== 'admin') {
     return (
       <AppShell active="admin">
@@ -38,9 +39,18 @@ export function AdminPage() {
           >
             {sq.admin.usersTab}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'agency'}
+            aria-pressed={tab === 'agency'}
+            onClick={() => setTab('agency')}
+          >
+            {sq.agency.tab}
+          </button>
         </div>
       </div>
-      {tab === 'catalog' ? <CatalogAdmin /> : <UsersAdmin />}
+      {tab === 'catalog' ? <CatalogAdmin /> : tab === 'users' ? <UsersAdmin /> : <AgencyAdmin />}
     </AppShell>
   );
 }

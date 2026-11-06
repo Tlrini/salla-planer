@@ -14,11 +14,14 @@ export function isGlb(buf: Buffer): boolean {
   return buf.length >= 12 && buf.toString('ascii', 0, 4) === 'glTF';
 }
 
-function removeModelFile(dataDir: string, url: string | undefined) {
-  if (!url?.startsWith(MODELS_URL)) return;
-  const file = path.join(dataDir, 'uploads', 'models', path.basename(url));
-  fs.rmSync(file, { force: true });
+/** Delete a file we stored under data/uploads/<folder>/ given its public URL. Ignores anything else. */
+export function removeUploadFile(dataDir: string, url: string | undefined): void {
+  const m = url ? /^\/uploads\/(models|thumbs|images)\/([\w.-]+)$/.exec(url) : null;
+  if (!m) return;
+  fs.rmSync(path.join(dataDir, 'uploads', m[1]!, path.basename(m[2]!)), { force: true });
 }
+
+const removeModelFile = removeUploadFile;
 
 export function registerUploadRoutes(app: FastifyInstance, db: DB, dataDir: string): void {
   const dir = path.join(dataDir, 'uploads', 'models');

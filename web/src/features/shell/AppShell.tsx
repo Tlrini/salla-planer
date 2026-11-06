@@ -13,9 +13,13 @@ export function AppShell({ active, children }: { active: Route['name']; children
   const links: Array<{ route: Route; label: string; match: Array<Route['name']> }> = [
     { route: { name: 'projects' }, label: sq.nav.projects, match: ['projects', 'project'] },
     { route: { name: 'halls' }, label: sq.nav.halls, match: ['halls', 'hall'] },
+    { route: { name: 'calendar' }, label: sq.nav.calendar, match: ['calendar'] },
+    { route: { name: 'library' }, label: sq.nav.library, match: ['library'] },
   ];
-  if (user?.role === 'admin')
+  if (user?.role === 'admin') {
+    links.push({ route: { name: 'dashboard' }, label: sq.nav.dashboard, match: ['dashboard'] });
     links.push({ route: { name: 'admin' }, label: sq.nav.admin, match: ['admin'] });
+  }
 
   return (
     <div className="shell">

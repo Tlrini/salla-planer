@@ -24,9 +24,14 @@ installs the decor. The result can be exported as a PDF (blueprint + 3D image + 
 - **Units:** meters everywhere in the data model. Show measurements as `12,5 m`.
 - **Devices:** laptop and **tablet with touch** are the main devices. Phone should work but can be
   cramped.
-- **Self-hosted:** must run on one small server or an office PC on the local network. No paid
-  cloud services, no external APIs, no CDNs at runtime (fonts and libraries are bundled).
-- **Cost:** only free, open-source libraries (MIT/Apache/BSD).
+- **Hosting (changed for the beta, approved by the user):** runs in the cloud (AWS or Azure) on
+  one small Linux VM with Docker, behind Caddy for HTTPS. Plain cloud infrastructure (VM, disk,
+  object storage for backups, an on-demand GPU VM for scanning in Beta 5) is allowed. It must
+  still also run on one office PC (`npm start`). No paid third-party APIs, no CDNs at runtime
+  (fonts and libraries are bundled), no cloud SDK inside the app (backups are synced by a host
+  script).
+- **Cost:** only free, open-source libraries (MIT/Apache/BSD). Exceptions need the user's
+  approval and are listed in section 16. Keep cloud costs low: no always-on GPU.
 
 ## 3. Tech stack (use exactly this unless the user approves a change)
 
@@ -45,12 +50,12 @@ installs the decor. The result can be exported as a PDF (blueprint + 3D image + 
 | PDF export | jsPDF, with an embedded Unicode TTF font (e.g. Noto Sans) so ë, ç and € render |
 | Fonts | self-hosted via @fontsource: Figtree (UI), JetBrains Mono (measurements), Cormorant Garamond (titles only) |
 | Tests | Vitest for pure logic, Playwright for one end-to-end smoke test |
-| Deploy | Dockerfile + docker-compose.yml; SQLite file and uploads in a mounted `data/` volume |
+| Deploy | Dockerfile + docker-compose.yml (app + Caddy for HTTPS); SQLite file and uploads in a mounted `data/` volume; `deploy/backup-sync.sh` copies backups to S3 / Azure Blob |
 
 Pin exact dependency versions in every `package.json` (no `^` or `~`).
 
 Approved additions (by the user): tsx, concurrently, nanoid, lucide-react, @fastify/cookie,
-@fastify/static, @fastify/multipart, ESLint/Prettier configs.
+@fastify/static, @fastify/multipart, ESLint/Prettier configs, Caddy (Docker image, Beta 0).
 
 ## 4. Folder structure
 
@@ -365,3 +370,85 @@ Work in this order. Do not start a phase before the previous one builds and its 
 - After each phase: run build + tests, fix failures, then give the user a short summary in the
   language they wrote to you in, with the exact commands to run the app.
 - If something in this file is unclear or impossible, say so and propose an option instead of guessing.
+
+## 16. Beta phase (approved plan)
+
+Goal of the beta: the agent scans her **real decorations** with a phone, they go into **one
+agency-wide library**, she puts them in any project (for example different flowers on the
+tables, as options A/B/C), and the client **walks through the decorated hall in 3D like Street
+View** on the agent's tablet, plus 360° images and a video to send. Build the sub-phases in order;
+the same rules as section 14 apply (build + tests pass before the next one starts).
+
+**Beta 0 – Cloud foundation**
+- One Linux VM (AWS or Azure) with docker-compose: app + Caddy (automatic HTTPS for `DOMAIN`).
+- Hardening for the internet: `COOKIE_SECURE=true`, `TRUST_PROXY` only for Caddy's fixed IP,
+  same login timing for unknown usernames, `/uploads/` needs a session, production refuses a weak
+  first admin password.
+- `deploy/backup-sync.sh` (host cron) copies `data/backups` and `data/uploads` to S3 / Blob.
+- `docs/deploy-cloud.md`: step-by-step setup for the chosen provider and a monthly cost table.
+- Done when: `https://<domain>` works on a phone, a backup lands in object storage, a restore was
+  tested once.
+
+**Beta 1 – Agency decor library (`Biblioteka e dekoreve`)**
+- Any agent uploads a `.glb` from a phone scan app (Scaniverse, Polycam, …). Library items are
+  `CatalogItem`s with `source: 'library'`, `createdBy`, `thumbnail`, `topView`, `tabletop`,
+  `modelRotation`, `scaleMode: 'uniform'` (agent enters the real height).
+- Server optimizes the model (weld, simplify, textures ≤ 2048 px, meshopt); keeps the original.
+  Dependencies to approve: @gltf-transform/core, @gltf-transform/functions,
+  @gltf-transform/extensions, meshoptimizer, sharp.
+- Setup dialog (upright/front rotation, real height, name, category, price, "on tables"),
+  thumbnails rendered with the offscreen renderer; sidebar group `Dekoret e skanuara`; repeated
+  models drawn with instancing.
+- Done when: an uploaded scan is visible to a second agent and placed in two projects, priced in
+  the summary and PDF.
+
+**Beta 2 – Decor on tables + design options**
+- `Item.tableDecor` (catalog id of a tabletop item) drawn on the table, priced per table,
+  "apply to all selected / all tables of this type" as one undo step.
+- Options `Opsioni A / B / C`: `Project.items` stays the active option; `Project.otherOptions`
+  holds the others; switcher in the top bar; "Zgjidh si përfundimtar"; PDF comparison page.
+- Done when: option A and B with different decor on 20 tables switch correctly and survive reload.
+
+**Beta 3 – Realistic 3D + walk mode (`Ec nëpër sallë`)**
+- Street-View style walking: tap the floor to glide there at 1,6 m, drag to look, WASD on
+  desktop; collision with walls and tables is a pure tested function in `shared/geometry.ts`;
+  saved viewpoints in the project.
+- Realism: bundled CC0 HDRI, PBR materials, tone mapping, soft shadows, post-processing behind a
+  quality toggle. Dependencies to approve: @react-three/postprocessing, postprocessing.
+- Done when: walking door → head table runs at ≥ 30 fps on a mid-range tablet ("Normale").
+
+**Beta 4 – Client presentation exports**
+- 360° panorama per viewpoint (equirectangular JPG), full-screen `Prezantim` mode, walkthrough
+  video (MediaRecorder), optional viewpoint/option pages in the PDF.
+
+**Beta 5 – Scanning inside the web page**
+- Decision gate first: license exception for the photogrammetry tool (Meshroom/AliceVision,
+  MPL-2.0, or COLMAP + OpenMVS) and the GPU setup.
+- Phone capture page (guided video, photo fallback) → `scan_jobs` queue → separate GPU worker
+  container (ffmpeg frames → photogrammetry → optimize), started on demand and stopped when idle →
+  crop box in the web app → normal Beta 1 setup → library.
+
+Later (not in beta): read-only client link, whole-room scan as hall template, editing in 3D.
+
+**Status (2026-11-06):** Beta 0–4 are built and tested (see README). Beta 5 waits for the
+decision gate above. Also added: hall templates use version checks like projects (examples are
+admin-only), and a quote with discount and extra services (`Project.pricing`) in the summary and
+the PDF. Beta project fields (options, viewpoints, pricing) are stored in the `extra` JSON column
+of `projects` (migration 2); hall versions came with migration 3.
+
+**Post-beta features (2026-11-06):** guest list + seating (`Project.guests`, `shared/seating.ts`),
+inventory stock (`CatalogItem.stock`, `/api/availability`, `/api/calendar`), event calendar, team
+checklist (`Project.checklist`), payments + agency settings + contract PDF (`Project.payments`,
+`settings` table – migration 4), version history (`project_versions` – migration 5), client share
+links (`shares`, `share_comments` – migration 6; public routes under `/api/public/share/`, they
+never expose guests, payments or notes), floor-plan photo (`Hall.underlay`, `/api/images`), plan
+annotations (`Project.annotations`), and the admin dashboard (`/api/stats`, `server/src/stats.ts`).
+Project tools open from the editor's "Projekti" menu.
+
+**Realistic 3D (2026-11-06):** "E lartë" uses `web/src/features/viewer3d/composer.ts` (postprocessing
+EffectComposer: n8ao ambient occlusion → bloom in the evening + ACES tone mapping → SMAA), shared
+by the live view (`Effects.tsx`) and the PDF/PNG renders. Dependencies `postprocessing` (Zlib
+licence) and `n8ao` (ISC licence), pinned. Do not enable n8ao `halfRes` (it crashes on three
+0.187). Reflections come from the bundled CC0 HDRI `web/public/env/ballroom_1k.hdr` ("Ballroom" by
+Sergej Majboroda, Poly Haven; loaded by `viewer3d/environment.ts`, off-screen renders wait for it,
+RoomEnvironment is the fallback).

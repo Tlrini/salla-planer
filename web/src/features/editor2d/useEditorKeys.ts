@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { history, useEditor } from '../../model/store';
+import { useUi } from '../../model/ui';
 
 const NUDGE = 0.1;
 const NUDGE_BIG = 1;
@@ -45,6 +46,11 @@ export function useEditorKeys(): void {
       switch (e.key) {
         case 'Delete':
         case 'Backspace':
+          if (s.annotationId) {
+            e.preventDefault();
+            s.removeAnnotation(s.annotationId);
+            return;
+          }
           if (sel.length) {
             e.preventDefault();
             s.removeItems(sel);
@@ -52,6 +58,7 @@ export function useEditorKeys(): void {
           return;
         case 'Escape':
           s.setSelection([]);
+          useUi.getState().set({ annotateTool: null, calibrating: false });
           return;
         case 'r':
         case 'R':
@@ -67,7 +74,9 @@ export function useEditorKeys(): void {
         ArrowDown: [0, step],
       };
       const d = dir[e.key];
-      if (d && sel.length) {
+      // In walk mode the arrow keys walk; they must not move the selected items.
+      const walking = useUi.getState().walk && useUi.getState().view !== '2d';
+      if (d && sel.length && !walking) {
         e.preventDefault();
         s.nudgeItems(sel, d[0], d[1]);
       }

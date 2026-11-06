@@ -3,14 +3,50 @@ services:
     build: .
     image: salla-planner:latest
     restart: unless-stopped
-    ports:
-      - '3000:3000'
+    # Not published on the host: only Caddy (HTTPS) talks to the app.
+    expose:
+      - '3000'
     environment:
       # Only used on the very first start, to create the first administrator.
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env (see .env.example)}
-      # Set to "true" only when the app is served over HTTPS.
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # Served over HTTPS by Caddy, so the session cookie is Secure.
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # Only Caddy (fixed IP below) may report the client IP via X-Forwarded-For.
+      TRUST_PROXY: 172.28.0.10
     volumes:
       # app.db, uploads/ (GLB models) and backups/ live here.
       - ./data:/app/data
+    networks:
+      - salla
+
+  caddy:
+    image: caddy:2.10.2-alpine
+    restart: unless-stopped
+    depends_on:
+      - salla
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    environment:
+      # Public domain of the app; Caddy gets a free Let's Encrypt certificate for it.
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env (see .env.example)}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      salla:
+        ipv4_address: 172.28.0.10
+
+networks:
+  salla:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  # Certificates; keep across restarts so Let's Encrypt limits are never hit.
+  caddy_data:
+  caddy_config:

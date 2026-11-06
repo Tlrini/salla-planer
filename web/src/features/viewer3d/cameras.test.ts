@@ -33,3 +33,46 @@ describe('cameraFor', () => {
     expect(c.target).toEqual([15, 1.2, 2]);
   });
 });
+
+describe('eye-level poses (Beta 3)', () => {
+  it('yaw 0 looks up the plan, 90 to the right; pitch follows the height', async () => {
+    const { poseLookingAt, yawDirection } = await import('./cameras');
+    expect(poseLookingAt(5, 5, [5, 1.6, 1]).yaw).toBeCloseTo(0);
+    expect(poseLookingAt(5, 5, [9, 1.6, 5]).yaw).toBeCloseTo(90);
+    expect(poseLookingAt(5, 5, [5, 5.6, 1]).pitch).toBeCloseTo(45);
+    const d = yawDirection(90);
+    expect(d.x).toBeCloseTo(1);
+    expect(d.y).toBeCloseTo(0);
+  });
+
+  it('derives viewpoints in front of the head table and the stage', async () => {
+    const { autoViewpoints } = await import('./cameras');
+    const hall = EXAMPLE_HALLS[0]!.hall;
+    const head = {
+      id: 'h',
+      type: 'table_head',
+      x: 15,
+      y: 4,
+      rotation: 0,
+      width: 3,
+      depth: 0.8,
+      color: '#FFFFFF',
+    };
+    const stage = {
+      id: 's',
+      type: 'stage',
+      x: 15,
+      y: 1.6,
+      rotation: 0,
+      width: 6,
+      depth: 3,
+      color: '#FFFFFF',
+    };
+    const views = autoViewpoints(hall, [head, stage]);
+    expect(views.map((v) => v.key)).toEqual(['entrance', 'headTable', 'stage']);
+    const h = views.find((v) => v.key === 'headTable')!.pose;
+    expect(h.x).toBeCloseTo(15);
+    expect(h.y).toBeCloseTo(7.4);
+    expect(Math.abs(h.yaw)).toBeCloseTo(0); // looking back up the plan at the couple
+  });
+});

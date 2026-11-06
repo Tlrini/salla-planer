@@ -20,6 +20,7 @@ function Row({ item }: { item: CatalogItem }) {
   const [d, setD] = useState(show(item.depth));
   const [h, setH] = useState(show(item.height));
   const [price, setPrice] = useState(show(item.price));
+  const [stock, setStock] = useState(item.stock === undefined ? '' : String(item.stock));
   const [active, setActive] = useState(item.active);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -30,7 +31,10 @@ function Row({ item }: { item: CatalogItem }) {
     const nh = parseNum(h);
     const np = parseNum(price);
     if (nw === null || nd === null || nh === null || np === null || !name.trim()) return null;
-    return { name: name.trim(), width: nw, depth: nd, height: nh, price: np, active };
+    // Empty stock = not tracked.
+    const ns = stock.trim() === '' ? undefined : Math.round(parseNum(stock) ?? -1);
+    if (ns !== undefined && ns < 0) return null;
+    return { name: name.trim(), width: nw, depth: nd, height: nh, price: np, active, stock: ns };
   })();
   const dirty =
     patch !== null &&
@@ -39,6 +43,7 @@ function Row({ item }: { item: CatalogItem }) {
       patch.depth !== item.depth ||
       patch.height !== item.height ||
       patch.price !== item.price ||
+      patch.stock !== item.stock ||
       patch.active !== item.active);
 
   const save = async () => {
@@ -116,6 +121,16 @@ function Row({ item }: { item: CatalogItem }) {
       </td>
       <td>
         <input
+          aria-label={`${sq.admin.stock}: ${item.name}`}
+          className="mono price-input"
+          inputMode="numeric"
+          placeholder="—"
+          value={stock}
+          onChange={(e) => setStock(e.target.value)}
+        />
+      </td>
+      <td>
+        <input
           type="checkbox"
           aria-label={sq.admin.active}
           checked={active}
@@ -181,6 +196,7 @@ export function CatalogAdmin() {
             <th>{sq.admin.name}</th>
             <th>{sq.admin.size}</th>
             <th>{sq.admin.price}</th>
+            <th title={sq.admin.stockHint}>{sq.admin.stock}</th>
             <th>{sq.admin.active}</th>
             <th>{sq.admin.model}</th>
             <th aria-hidden />

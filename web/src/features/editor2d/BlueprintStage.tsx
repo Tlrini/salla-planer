@@ -6,8 +6,12 @@ import {
   boxesOverlap,
   clampToHall,
   halfExtents,
+  isTabletop,
   itemBox,
+  pointInItem,
   normalizeAngle,
+  occupancy,
+  seatingTables,
   snap,
   type Item,
 } from '@salla/shared';
@@ -17,6 +21,13 @@ import { HallLayer } from './HallLayer';
 import { ItemNode } from './ItemNode';
 import { SelectionTransformer } from './SelectionTransformer';
 import { SelectionInfo } from './SelectionInfo';
+import { AnnotationLayer, ToolPreview } from './AnnotationLayer';
+import { Circle as KonvaCircle } from 'react-konva';
+import { nanoid } from 'nanoid';
+import { Modal } from '../../components/Modal';
+import { NumberField } from '../editor/fields';
+import { scaleUnderlay } from '../editor/UnderlaySettings';
+import type { Annotation } from '@salla/shared';
 import { CanvasControls } from './CanvasControls';
 import { BLUEPRINT, CM, ITEM_DRAG_MIME, layerRank } from './units';
 import { sq } from '../../i18n/sq';
@@ -43,6 +54,22 @@ type Gesture =
 
 const clampScale = (s: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
+/** Tables that have a separately placed table-top item (centerpiece, candles…) standing on them. */
+export function tablesUnderDecor(items: readonly Item[]): Set<string> {
+  const out = new Set<string>();
+  const tops = items.filter((i) => isTabletop(catalogMap.get(i.type)));
+  if (!tops.length) return out;
+  for (const t of items) {
+    const cat = catalogMap.get(t.type);
+    if (cat?.category !== 'tables' || isTabletop(cat)) continue;
+    if (tops.some((d) => pointInItem(d.x, d.y, t, cat))) out.add(t.id);
+  }
+  return out;
+}
+
+const NO_ANNOTATIONS: Annotation[] = [];
+type Pt = { x: number; y: number };
+
 export function BlueprintStage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -58,6 +85,22 @@ export function BlueprintStage() {
   const mode = useUi((s) => s.mode);
   const snapRef = useRef(snapOn);
   snapRef.current = snapOn;
+  // Plan tools: annotations and the floor-plan photo calibration.
+  const tool = useUi((s) => s.annotateTool);
+  const calibrating = useUi((s) => s.calibrating);
+  const annotations = useEditor((s) => s.project.annotations ?? NO_ANNOTATIONS);
+  const annotationId = useEditor((s) => s.annotationId);
+  const toolDrag = useRef<{ tool: 'measure' | 'zone'; from: Pt; to: Pt } | null>(null);
+  const [toolPreview, setToolPreview] = useState<{
+    tool: 'measure' | 'zone';
+    from: Pt;
+    to: Pt;
+  } | null>(null);
+  const [cal, setCal] = useState<{ p1?: Pt; p2?: Pt }>({});
+  const [calDistance, setCalDistance] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!calibrating) setCal({});
+  }, [calibrating]);
 
   const [rubber, setRubber] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const gesture = useRef<Gesture>(null);
@@ -126,11 +169,42 @@ export function BlueprintStage() {
     target === stageRef.current || target.name() === 'background';
 
   // ----- stage pointer: pan, rubber-band, deselect --------------------------
+  /** Pointer position in plan meters (snapped to 10 cm when snapping is on). */
+  const planPoint = (p: Konva.Vector2d): Pt => {
+    const h = toHall(p);
+    const s = snapRef.current ? SNAP_STEP : 0.01;
+    return { x: snap(h.x / CM, s), y: snap(h.y / CM, s) };
+  };
+
   const onStagePointerDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
-    if (pinch.current || !isBackground(e.target)) return;
+    if (pinch.current) return;
     const stage = stageRef.current!;
     const p = stage.getPointerPosition();
     if (!p) return;
+    if (calibrating) {
+      const pt = planPoint(p);
+      setCal((c) => (!c.p1 || c.p2 ? { p1: pt } : { p1: c.p1, p2: pt }));
+      return;
+    }
+    if (tool) {
+      const pt = planPoint(p);
+      if (tool === 'text') {
+        useEditor.getState().addAnnotation({
+          id: nanoid(8),
+          kind: 'text',
+          x: pt.x,
+          y: pt.y,
+          text: sq.annotate.defaultText,
+          size: 0.45,
+        });
+        useUi.getState().set({ annotateTool: null });
+        return;
+      }
+      toolDrag.current = { tool, from: pt, to: pt };
+      setToolPreview(toolDrag.current);
+      return;
+    }
+    if (!isBackground(e.target)) return;
     const additive = e.evt.shiftKey;
     if (mode === 'select' || additive) {
       const h = toHall(p);
@@ -142,6 +216,14 @@ export function BlueprintStage() {
   };
 
   const onStagePointerMove = () => {
+    const t = toolDrag.current;
+    if (t) {
+      const p = stageRef.current!.getPointerPosition();
+      if (!p) return;
+      t.to = planPoint(p);
+      setToolPreview({ ...t });
+      return;
+    }
     const g = gesture.current;
     if (!g || pinch.current) return;
     const p = stageRef.current!.getPointerPosition();
@@ -166,12 +248,40 @@ export function BlueprintStage() {
   };
 
   const endGesture = useCallback(() => {
+    const t = toolDrag.current;
+    if (t) {
+      toolDrag.current = null;
+      setToolPreview(null);
+      const w = snap(Math.abs(t.to.x - t.from.x), 0.01);
+      const h = snap(Math.abs(t.to.y - t.from.y), 0.01);
+      if (Math.hypot(w, h) >= 0.1) {
+        useEditor.getState().addAnnotation(
+          t.tool === 'measure'
+            ? { id: nanoid(8), kind: 'measure', x1: t.from.x, y1: t.from.y, x2: t.to.x, y2: t.to.y }
+            : {
+                id: nanoid(8),
+                kind: 'zone',
+                x: Math.min(t.from.x, t.to.x),
+                y: Math.min(t.from.y, t.to.y),
+                width: Math.max(0.1, w),
+                height: Math.max(0.1, h),
+                color: '#C9A44C',
+                label: sq.annotate.zoneLabel,
+              },
+        );
+      }
+      useUi.getState().set({ annotateTool: null });
+      return;
+    }
     const g = gesture.current;
     gesture.current = null;
     if (!g) return;
     const state = useEditor.getState();
     if (g.kind === 'pan') {
-      if (!g.moved && !g.additive) state.setSelection([]);
+      if (!g.moved && !g.additive) {
+        state.setSelection([]);
+        state.selectAnnotation(null);
+      }
       return;
     }
     setRubber(null);
@@ -349,6 +459,17 @@ export function BlueprintStage() {
     [items],
   );
   const labels = useMemo(() => autoLabels(items, catalogMap), [items]);
+  // With a guest list, table labels show how many guests sit there: "T1 · 8/10".
+  const guests = useEditor((s) => s.project.guests);
+  const seatLabels = useMemo(() => {
+    const out = new Map<string, string>();
+    if (!guests?.length) return out;
+    const occ = occupancy(guests);
+    for (const t of seatingTables(items, catalogMap))
+      out.set(t.id, `${t.label} · ${occ.get(t.id) ?? 0}/${t.capacity}`);
+    return out;
+  }, [guests, items]);
+  const decorated = useMemo(() => tablesUnderDecor(items), [items]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const selectedItems = useMemo(
     () => items.filter((i) => selectedSet.has(i.id)),
@@ -384,7 +505,15 @@ export function BlueprintStage() {
           <Layer>
             <HallLayer hall={hall} scale={view.scale} />
           </Layer>
-          <Layer>
+          <Layer listening={!tool && !calibrating}>
+            <AnnotationLayer
+              annotations={annotations}
+              scale={view.scale}
+              selectedId={annotationId}
+              onSelect={(id) => useEditor.getState().selectAnnotation(id)}
+              onMove={(id, dx, dy) => useEditor.getState().moveAnnotation(id, dx, dy)}
+              only="below"
+            />
             {sorted.map((item) => {
               const cat = catalogMap.get(item.type);
               return (
@@ -393,7 +522,9 @@ export function BlueprintStage() {
                   item={item}
                   cat={cat}
                   selected={selectedSet.has(item.id)}
-                  label={item.label?.trim() || labels.get(item.id)}
+                  label={seatLabels.get(item.id) ?? (item.label?.trim() || labels.get(item.id))}
+                  decor={item.tableDecor ? catalogMap.get(item.tableDecor) : undefined}
+                  decorated={decorated.has(item.id)}
                   showName={
                     halfExtents(item, cat).hx * 2 >= 1.5 && halfExtents(item, cat).hy * 2 >= 0.25
                   }
@@ -404,6 +535,14 @@ export function BlueprintStage() {
                 />
               );
             })}
+            <AnnotationLayer
+              annotations={annotations}
+              scale={view.scale}
+              selectedId={annotationId}
+              onSelect={(id) => useEditor.getState().selectAnnotation(id)}
+              onMove={(id, dx, dy) => useEditor.getState().moveAnnotation(id, dx, dy)}
+              only="above"
+            />
             <SelectionTransformer
               stageRef={stageRef}
               selected={selectedItems}
@@ -412,6 +551,32 @@ export function BlueprintStage() {
           </Layer>
           <Layer listening={false}>
             <SelectionInfo selected={selectedItems} scale={view.scale} />
+            {toolPreview && (
+              <ToolPreview
+                tool={toolPreview.tool}
+                from={toolPreview.from}
+                to={toolPreview.to}
+                scale={view.scale}
+              />
+            )}
+            {cal.p1 && cal.p2 && (
+              <ToolPreview tool="calibrate" from={cal.p1} to={cal.p2} scale={view.scale} />
+            )}
+            {[cal.p1, cal.p2].map(
+              (p, i) =>
+                p && (
+                  <KonvaCircle
+                    key={i}
+                    x={p.x * CM}
+                    y={p.y * CM}
+                    radius={7 / view.scale}
+                    fill={BLUEPRINT.selection}
+                    stroke="#fff"
+                    strokeWidth={2}
+                    strokeScaleEnabled={false}
+                  />
+                ),
+            )}
             {rubber && (
               <Rect
                 x={rubber.x}
@@ -428,6 +593,55 @@ export function BlueprintStage() {
           </Layer>
         </Stage>
       )}
+      {(calibrating || tool) && (
+        <p className="canvas-hint" role="status">
+          {calibrating
+            ? cal.p1
+              ? sq.underlay.stepTwo
+              : sq.underlay.stepOne
+            : sq.annotate.hints[tool!]}
+        </p>
+      )}
+      <Modal
+        open={!!(calibrating && cal.p1 && cal.p2)}
+        title={sq.underlay.distanceTitle}
+        onClose={() => setCal({})}
+        actions={
+          <>
+            <button type="button" className="btn" onClick={() => setCal({})}>
+              {sq.common.cancel}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!calDistance}
+              onClick={() => {
+                const u = useEditor.getState().project.hall.underlay;
+                const measured =
+                  cal.p1 && cal.p2 ? Math.hypot(cal.p2.x - cal.p1.x, cal.p2.y - cal.p1.y) : 0;
+                if (u && cal.p1 && calDistance && measured > 0)
+                  useEditor.getState().updateHall({
+                    underlay: scaleUnderlay(u, calDistance / measured, cal.p1),
+                  });
+                setCal({});
+                useUi.getState().set({ calibrating: false });
+              }}
+            >
+              {sq.underlay.apply}
+            </button>
+          </>
+        }
+      >
+        <NumberField
+          label={sq.underlay.distance}
+          value={calDistance}
+          unit="m"
+          min={0.1}
+          max={1000}
+          allowEmpty
+          onCommit={setCalDistance}
+        />
+      </Modal>
       <CanvasControls
         onZoomIn={() => zoomCenter(1.25)}
         onZoomOut={() => zoomCenter(0.8)}

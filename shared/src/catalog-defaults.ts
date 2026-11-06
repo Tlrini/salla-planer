@@ -204,6 +204,7 @@ export const DEFAULT_CATALOG: CatalogItem[] = [
     defaultColor: '#E8C4C4',
     defaultColor2: '#9CAF88',
     price: 35,
+    tabletop: true,
   }),
   def({
     id: 'flower_stand',
@@ -227,6 +228,7 @@ export const DEFAULT_CATALOG: CatalogItem[] = [
     shape2d: 'circle',
     defaultColor: '#F3EBDD',
     price: 10,
+    tabletop: true,
   }),
   def({
     id: 'balloon_cluster',

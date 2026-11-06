@@ -16,8 +16,29 @@ export interface AppConfig {
   secureCookies: boolean;
   production: boolean;
   logger: boolean;
+  /**
+   * Proxy IPs/CIDRs (comma-separated) allowed to set X-Forwarded-For, the client IP used for the
+   * login limit. false = no proxy (direct access, the default). Behind Caddy in docker-compose
+   * this is Caddy's fixed container IP.
+   */
+  trustProxy?: false | string;
   adminUser?: string;
   adminPassword?: string;
+}
+
+/**
+ * TRUST_PROXY env: unset/"false" -> false, "172.28.0.10" or "10.0.0.0/8,127.0.0.1" -> that list.
+ * "true" and hop counts are refused: "true" trusts any client-sent header (the login limit
+ * becomes bypassable), and Fastify does not apply hop counts to X-Forwarded-For.
+ */
+export function parseTrustProxy(value: string | undefined): false | string {
+  const v = value?.trim();
+  if (!v || v === 'false') return false;
+  if (v === 'true' || /^\d+$/.test(v))
+    throw new Error(
+      'TRUST_PROXY must list proxy IPs/CIDRs, e.g. 172.28.0.10 (not true or a hop count).',
+    );
+  return v;
 }
 
 /** Production = NODE_ENV=production (Docker) or `--production` (npm start on an office PC). */
@@ -35,6 +56,7 @@ export function configFromEnv(env = process.env): AppConfig {
     secureCookies: env.COOKIE_SECURE === 'true',
     production,
     logger: env.NODE_ENV !== 'test',
+    trustProxy: parseTrustProxy(env.TRUST_PROXY),
     adminUser: env.ADMIN_USER,
     adminPassword: env.ADMIN_PASSWORD,
   };

@@ -5,6 +5,14 @@ import type { DB } from './db.js';
 
 export const BCRYPT_ROUNDS = 11;
 
+/** The first admin of an internet-facing server needs a real password. */
+export const MIN_ADMIN_PASSWORD = 12;
+const EXAMPLE_PASSWORDS = new Set(['change-me-please', 'admin123', 'password', 'administrator']);
+
+export function isStrongAdminPassword(password: string): boolean {
+  return password.length >= MIN_ADMIN_PASSWORD && !EXAMPLE_PASSWORDS.has(password.toLowerCase());
+}
+
 export interface SeedOptions {
   adminUser?: string;
   adminPassword?: string;
@@ -58,6 +66,10 @@ export function seed(db: DB, opts: SeedOptions): void {
       password = 'admin123';
       opts.log(
         'No ADMIN_USER/ADMIN_PASSWORD set: created development admin "admin" / "admin123". Change it in Administrimi.',
+      );
+    } else if (opts.production && !isStrongAdminPassword(password)) {
+      throw new Error(
+        `ADMIN_PASSWORD is too weak for production: use at least ${MIN_ADMIN_PASSWORD} characters and not the example value.`,
       );
     }
     db.prepare(

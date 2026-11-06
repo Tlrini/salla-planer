@@ -1,0 +1,21 @@
+# HTTPS in front of Salla Planner. Caddy obtains and renews the certificate for {$DOMAIN}
+# automatically (Let's Encrypt). With DOMAIN=localhost it uses its own local certificate.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Scanned decor uploads (.glb) may be up to 100 MB; leave headroom for the multipart envelope.
+	request_body {
+		max_size 110MB
+	}
+
+	# Caddy replaces any client-sent X-Forwarded-For with the real client IP.
+	reverse_proxy salla:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+}

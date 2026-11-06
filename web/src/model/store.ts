@@ -10,9 +10,13 @@ import {
   normalizeAngle,
   snap,
   type CatalogItem,
+  type DesignOption,
   type Hall,
   type Item,
+  type Annotation,
+  type OptionRef,
   type Project,
+  type Viewpoint,
 } from '@salla/shared';
 import { sq } from '../i18n/sq';
 
@@ -88,6 +92,8 @@ export function createItem(type: string, at: { x: number; y: number }): Item {
 export interface EditorState {
   project: Project;
   selection: string[];
+  /** Selected plan annotation (measure / text / zone); never together with an item selection. */
+  annotationId: string | null;
   meta: EditorMeta | null;
   addItem: (type: string, at: { x: number; y: number }, exact?: boolean) => string;
   /** Add several new items of one type at exact positions, as one undo step. */
@@ -104,9 +110,43 @@ export interface EditorState {
   /** Open a server project (clears undo history). */
   openProject: (project: Project) => void;
   /** Open a hall template: its structure items become the editable items. */
-  openHall: (id: string, hall: Hall) => void;
+  openHall: (id: string, hall: Hall, version?: number) => void;
   setMeta: (patch: Partial<EditorMeta>) => void;
   setSelection: (ids: string[]) => void;
+  /** Put a table-top decor (catalog id) on these tables, or remove it (undefined). One undo step. */
+  setTableDecor: (tableIds: readonly string[], decor: string | undefined) => void;
+  /** Copy the current option into a new one and switch to it ("Opsioni B"). Returns its id. */
+  addOption: () => string;
+  switchOption: (id: string) => void;
+  renameOption: (id: string, name: string) => void;
+  deleteOption: (id: string) => void;
+  setFinalOption: (id: string | undefined) => void;
+  /** Save an eye-level view (walk mode) under an automatic name ("Pamja 3"). Returns it. */
+  addViewpoint: (pose: Omit<Viewpoint, 'id' | 'name'>) => Viewpoint;
+  addAnnotation: (a: Annotation) => void;
+  updateAnnotation: (id: string, patch: Partial<Annotation>) => void;
+  /** Move an annotation by (dx, dy) meters (one undo step per finished drag). */
+  moveAnnotation: (id: string, dx: number, dy: number) => void;
+  removeAnnotation: (id: string) => void;
+  selectAnnotation: (id: string | null) => void;
+  removeViewpoint: (id: string) => void;
+}
+
+/** The active option of a project (a single-option project has an implicit one). */
+export function activeOption(p: Project): OptionRef {
+  return p.option ?? { id: 'A', name: sq.options.name(0) };
+}
+
+/** All options in display order: the active one keeps its place among the others. */
+export function allOptions(p: Project): OptionRef[] {
+  const active = activeOption(p);
+  const list = [active, ...(p.otherOptions ?? []).map(({ id, name }) => ({ id, name }))];
+  return list.sort((a, b) => a.name.localeCompare(b.name, 'sq', { numeric: true }));
+}
+
+function nextOptionName(p: Project): string {
+  const used = new Set([activeOption(p).name, ...(p.otherOptions ?? []).map((o) => o.name)]);
+  for (let i = 0; ; i++) if (!used.has(sq.options.name(i))) return sq.options.name(i);
 }
 
 function patchChanges(item: Item, patch: Partial<Item>): boolean {
@@ -122,6 +162,7 @@ export const useEditor = create<EditorState>()(
     (set, get) => ({
       project: newProject(),
       selection: [],
+      annotationId: null,
       meta: null,
 
       addItem: (type, at, exact = false) => {
@@ -236,7 +277,7 @@ export const useEditor = create<EditorState>()(
         useEditor.temporal.getState().clear();
       },
 
-      openHall: (id, hall) => {
+      openHall: (id, hall, version = 0) => {
         const project = {
           ...newProject(),
           id,
@@ -244,7 +285,7 @@ export const useEditor = create<EditorState>()(
           hall: { ...hall, structure: [] },
           items: hall.structure,
         };
-        set({ project, selection: [], meta: { kind: 'hall', id, version: 0 } });
+        set({ project, selection: [], meta: { kind: 'hall', id, version } });
         useEditor.temporal.getState().clear();
       },
 
@@ -253,7 +294,184 @@ export const useEditor = create<EditorState>()(
         if (meta) set({ meta: { ...meta, ...patch } });
       },
 
-      setSelection: (ids) => set({ selection: ids }),
+      setSelection: (ids) => set({ selection: ids, annotationId: null }),
+
+      addAnnotation: (a) => {
+        const { project } = get();
+        set({
+          project: {
+            ...project,
+            annotations: [...(project.annotations ?? []), a],
+            updatedAt: new Date().toISOString(),
+          },
+          annotationId: a.id,
+          selection: [],
+        });
+      },
+
+      updateAnnotation: (id, patch) => {
+        const { project } = get();
+        set({
+          project: {
+            ...project,
+            annotations: (project.annotations ?? []).map((a) =>
+              a.id === id ? ({ ...a, ...patch } as Annotation) : a,
+            ),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      },
+
+      moveAnnotation: (id, dx, dy) => {
+        if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
+        const a = get().project.annotations?.find((x) => x.id === id);
+        if (!a) return;
+        const r = (v: number) => snap(v, 0.01);
+        get().updateAnnotation(
+          id,
+          a.kind === 'measure'
+            ? { x1: r(a.x1 + dx), y1: r(a.y1 + dy), x2: r(a.x2 + dx), y2: r(a.y2 + dy) }
+            : { x: r(a.x + dx), y: r(a.y + dy) },
+        );
+      },
+
+      removeAnnotation: (id) => {
+        const { project } = get();
+        set({
+          project: {
+            ...project,
+            annotations: (project.annotations ?? []).filter((a) => a.id !== id),
+            updatedAt: new Date().toISOString(),
+          },
+          annotationId: null,
+        });
+      },
+
+      selectAnnotation: (id) => set({ annotationId: id, selection: [] }),
+
+      setTableDecor: (tableIds, decor) => {
+        const patches: Record<string, Partial<Item>> = {};
+        for (const id of tableIds) patches[id] = { tableDecor: decor };
+        get().updateItems(patches);
+      },
+
+      addOption: () => {
+        const { project } = get();
+        const current: DesignOption = { ...activeOption(project), items: project.items };
+        const created: OptionRef = { id: nanoid(8), name: nextOptionName(project) };
+        set({
+          project: {
+            ...project,
+            option: created,
+            otherOptions: [...(project.otherOptions ?? []), current],
+            items: project.items.map((i) => ({ ...i })),
+            updatedAt: new Date().toISOString(),
+          },
+          selection: [],
+        });
+        return created.id;
+      },
+
+      switchOption: (id) => {
+        const { project } = get();
+        const others = project.otherOptions ?? [];
+        const target = others.find((o) => o.id === id);
+        if (!target) return;
+        const current: DesignOption = { ...activeOption(project), items: project.items };
+        set({
+          project: {
+            ...project,
+            option: { id: target.id, name: target.name },
+            otherOptions: others.map((o) => (o.id === id ? current : o)),
+            items: target.items,
+            updatedAt: new Date().toISOString(),
+          },
+          selection: [],
+        });
+      },
+
+      renameOption: (id, name) => {
+        const { project } = get();
+        const clean = name.trim().slice(0, 40);
+        if (!clean) return;
+        const active = activeOption(project);
+        set({
+          project: {
+            ...project,
+            option: active.id === id ? { ...active, name: clean } : project.option,
+            otherOptions: (project.otherOptions ?? []).map((o) =>
+              o.id === id ? { ...o, name: clean } : o,
+            ),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      },
+
+      deleteOption: (id) => {
+        const { project } = get();
+        const others = project.otherOptions ?? [];
+        if (!others.length) return; // the last option cannot be deleted
+        const finalOptionId = project.finalOptionId === id ? undefined : project.finalOptionId;
+        if (activeOption(project).id === id) {
+          const [next, ...rest] = others;
+          set({
+            project: {
+              ...project,
+              option: { id: next!.id, name: next!.name },
+              otherOptions: rest,
+              items: next!.items,
+              finalOptionId,
+              updatedAt: new Date().toISOString(),
+            },
+            selection: [],
+          });
+        } else {
+          set({
+            project: {
+              ...project,
+              otherOptions: others.filter((o) => o.id !== id),
+              finalOptionId,
+              updatedAt: new Date().toISOString(),
+            },
+          });
+        }
+      },
+
+      addViewpoint: (pose) => {
+        const { project } = get();
+        const list = project.viewpoints ?? [];
+        const used = new Set(list.map((v) => v.name));
+        let n = list.length + 1;
+        while (used.has(sq.walk.viewName(n))) n++;
+        const vp: Viewpoint = {
+          id: nanoid(8),
+          name: sq.walk.viewName(n),
+          x: snap(pose.x, 0.01),
+          y: snap(pose.y, 0.01),
+          yaw: Math.round(pose.yaw * 10) / 10,
+          pitch: Math.max(-89, Math.min(89, Math.round(pose.pitch * 10) / 10)),
+        };
+        set({
+          project: { ...project, viewpoints: [...list, vp], updatedAt: new Date().toISOString() },
+        });
+        return vp;
+      },
+
+      removeViewpoint: (id) => {
+        const { project } = get();
+        set({
+          project: {
+            ...project,
+            viewpoints: (project.viewpoints ?? []).filter((v) => v.id !== id),
+            updatedAt: new Date().toISOString(),
+          },
+        });
+      },
+
+      setFinalOption: (id) => {
+        const { project } = get();
+        set({ project: { ...project, finalOptionId: id, updatedAt: new Date().toISOString() } });
+      },
     }),
     {
       limit: 100,

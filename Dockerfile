@@ -1,7 +1,7 @@
 # ---- build: install everything, build shared + server + web
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 COPY web/package.json web/
@@ -15,7 +15,7 @@ ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/app/data
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY shared/package.json shared/
 COPY server/package.json server/
 COPY web/package.json web/

@@ -1,8 +1,9 @@
 import { memo } from 'react';
-import { Arc, Group, Line, Rect, Shape, Text } from 'react-konva';
+import { Arc, Group, Image as KonvaImage, Line, Rect, Shape, Text } from 'react-konva';
 import type Konva from 'konva';
 import { formatMeters, type Hall, type Item } from '@salla/shared';
 import { BLUEPRINT, CM, FONT_MONO } from './units';
+import { useLoadedImage } from './images';
 
 interface Props {
   hall: Hall;
@@ -101,10 +102,24 @@ function HallLayerImpl({ hall, scale }: Props) {
   const font = px(13);
   const off = px(22);
   const tick = px(6);
+  const u = hall.underlay;
+  const photo = useLoadedImage(u?.url);
 
   return (
     <Group>
       <Rect name="background" x={0} y={0} width={w} height={h} fill={BLUEPRINT.hallFill} />
+      {u && photo && (
+        // Photo of the real floor plan, under the grid and the decor.
+        <KonvaImage
+          image={photo}
+          x={u.x * CM}
+          y={u.y * CM}
+          width={u.width * CM}
+          height={u.height * CM}
+          opacity={u.opacity}
+          listening={false}
+        />
+      )}
       <Shape
         sceneFunc={gridScene(w, h, CM, 5 * CM)}
         stroke={BLUEPRINT.gridMinor}

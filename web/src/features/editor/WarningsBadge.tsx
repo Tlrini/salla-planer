@@ -1,8 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, TriangleExclamationPoint } from 'lucide-react';
-import { autoLabels, formatMeters, layoutWarnings, type LayoutWarning } from '@salla/shared';
+import {
+  autoLabels,
+  formatMeters,
+  layoutWarnings,
+  shortages,
+  usageOf,
+  type LayoutWarning,
+  type Shortage,
+} from '@salla/shared';
 import { sq } from '../../i18n/sq';
-import { catalogMap, useEditor } from '../../model/store';
+import { useAvailability } from '../../model/availability';
+import { catalog, catalogMap, useCatalogVersion, useEditor } from '../../model/store';
 import { useDebounced } from '../../model/useDebounced';
 
 /** Small non-blocking badge: overlaps, narrow aisles, too few seats. Click a warning to select the items. */
@@ -19,6 +28,20 @@ export function WarningsBadge() {
     [items, guestTarget],
   );
   const labels = useMemo(() => autoLabels(items, catalogMap), [items]);
+  // Stock: what this layout needs plus what confirmed events take the same day.
+  const availability = useAvailability((s) => s.data);
+  const catalogVersion = useCatalogVersion();
+  const stock: Shortage[] = useMemo(
+    () =>
+      shortages(
+        usageOf(items, catalog),
+        new Map(Object.entries(availability?.taken ?? {})),
+        catalogMap,
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalog is mutated in place
+    [items, availability, catalogVersion],
+  );
+  const drafts = availability?.events.filter((e) => e.status === 'draft').length ?? 0;
 
   useEffect(() => {
     if (!open) return;
@@ -42,7 +65,7 @@ export function WarningsBadge() {
         ? sq.warnings.aisle(name(w.ids[0]), name(w.ids[1]), formatMeters(w.gap, 2))
         : sq.warnings.seats(w.missing);
 
-  const n = warnings.length;
+  const n = warnings.length + stock.length;
   return (
     <div className="warnings" ref={wrap}>
       <button
@@ -60,6 +83,12 @@ export function WarningsBadge() {
         <div className="menu warnings-list" role="dialog" aria-label={sq.warnings.title}>
           <strong>{sq.warnings.title}</strong>
           {n === 0 && <p className="muted small">{sq.warnings.none}</p>}
+          {stock.map((s) => (
+            <p key={s.type} className="menu-item warn-stock">
+              {sq.warnings.stock(s.name, s.missing, s.stock, s.taken)}
+            </p>
+          ))}
+          {drafts > 0 && <p className="muted small">{sq.warnings.tentative(drafts)}</p>}
           {warnings.slice(0, 30).map((w, i) => (
             <button
               key={i}

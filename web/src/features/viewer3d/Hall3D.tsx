@@ -2,23 +2,42 @@ import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { WINDOW_SILL, type Hall, type Item } from '@salla/shared';
 import { geo, mat } from './resources';
-import { FLOOR_TILE_METERS, floorTexture } from './textures';
+import { FLOOR_TILE_METERS, floorTextures } from './textures';
+
+/** Relief strength per floor: deep plank seams and grout, faint slab joints, soft carpet pile. */
+const FLOOR_BUMP: Record<Hall['floor'], number> = {
+  parket: 1.2,
+  mermer: 0.6,
+  pllake: 1.6,
+  tapet: 0.5,
+};
 
 function useFloorMaterial(hall: Hall) {
   const material = useMemo(() => {
-    const tex = floorTexture(hall.floor, hall.floorColor).clone();
-    tex.needsUpdate = true;
     const tile = FLOOR_TILE_METERS[hall.floor];
-    tex.repeat.set(hall.width / tile, hall.length / tile);
+    const maps = floorTextures(hall.floor, hall.floorColor);
+    // Clones share the image but get their own repeat for this hall's size.
+    const [map, bump, rough] = [maps.map, maps.bump, maps.rough].map((t) => {
+      const c = t.clone();
+      c.repeat.set(hall.width / tile, hall.length / tile);
+      c.needsUpdate = true;
+      return c;
+    });
     return new THREE.MeshStandardMaterial({
-      map: tex,
-      roughness: hall.floor === 'mermer' ? 0.18 : hall.floor === 'tapet' ? 0.95 : 0.55,
+      map,
+      bumpMap: bump,
+      bumpScale: FLOOR_BUMP[hall.floor],
+      // The roughness map holds the real values (polished marble, worn varnish, matte grout).
+      roughness: 1,
+      roughnessMap: rough,
       metalness: hall.floor === 'mermer' ? 0.08 : 0,
     });
   }, [hall.floor, hall.floorColor, hall.width, hall.length]);
   useEffect(
     () => () => {
       material.map?.dispose();
+      material.bumpMap?.dispose();
+      material.roughnessMap?.dispose();
       material.dispose();
     },
     [material],

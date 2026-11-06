@@ -3,6 +3,8 @@ import bcrypt from 'bcrypt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { LoginBody, type SessionUser } from '@salla/shared';
 import type { DB } from './db.js';
+import { PUBLIC_SHARE_PREFIX } from './constants.js';
+import { BCRYPT_ROUNDS } from './seed.js';
 
 export const SESSION_COOKIE = 'salla_sid';
 const SESSION_DAYS = 30;
@@ -33,9 +35,17 @@ const toSessionUser = (r: UserRow): SessionUser => ({
 
 /** Paths reachable without a session. */
 const PUBLIC = new Set(['/api/auth/login', '/api/health']);
+/** Everything under these prefixes needs a session (uploaded models are private agency data). */
+const PROTECTED_PREFIXES = ['/api/', '/uploads/'];
 
 export function registerAuth(app: FastifyInstance, db: DB, secureCookies: boolean): void {
   const attempts = new Map<string, { count: number; reset: number }>();
+  // Compared against when the username does not exist, so a wrong username takes as long as a
+  // wrong password and response times do not reveal which usernames exist.
+  const dummyHash = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), BCRYPT_ROUNDS);
+  const pruneAttempts = (now: number) => {
+    for (const [ip, a] of attempts) if (a.reset <= now) attempts.delete(ip);
+  };
 
   const userBySession = db.prepare(
     `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ? AND u.active = 1`,
@@ -44,7 +54,9 @@ export function registerAuth(app: FastifyInstance, db: DB, secureCookies: boolea
   // Every /api route except the public ones needs a valid session.
   app.addHook('onRequest', async (req, reply) => {
     const url = req.url.split('?')[0]!;
-    if (!url.startsWith('/api/') || PUBLIC.has(url)) return;
+    if (!PROTECTED_PREFIXES.some((p) => url.startsWith(p)) || PUBLIC.has(url)) return;
+    // Client share links work without an account; each route checks its own token.
+    if (url.startsWith(PUBLIC_SHARE_PREFIX)) return;
     const token = req.cookies[SESSION_COOKIE];
     const row = token ? (userBySession.get(token, Date.now()) as UserRow | undefined) : undefined;
     if (!row) return reply.code(401).send({ error: 'unauthorized' });
@@ -54,6 +66,7 @@ export function registerAuth(app: FastifyInstance, db: DB, secureCookies: boolea
   app.post('/api/auth/login', async (req, reply) => {
     const ip = req.ip;
     const now = Date.now();
+    pruneAttempts(now);
     const a = attempts.get(ip);
     if (a && a.reset > now && a.count >= LOGIN_MAX_ATTEMPTS)
       return reply.code(429).send({ error: 'too_many_attempts' });
@@ -63,7 +76,7 @@ export function registerAuth(app: FastifyInstance, db: DB, secureCookies: boolea
     const row = db
       .prepare('SELECT * FROM users WHERE username = ? AND active = 1')
       .get(body.data.username) as UserRow | undefined;
-    const ok = row ? await bcrypt.compare(body.data.password, row.password_hash) : false;
+    const ok = await bcrypt.compare(body.data.password, row?.password_hash ?? dummyHash);
     if (!row || !ok) {
       const cur = a && a.reset > now ? a : { count: 0, reset: now + LOGIN_WINDOW_MS };
       cur.count++;

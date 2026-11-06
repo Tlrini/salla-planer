@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import bcrypt from 'bcrypt';
 import { nanoid } from 'nanoid';
 import { UserCreate, UserUpdate, type User } from '@salla/shared';
-import { requireAdmin } from '../auth.js';
+import { requireAdmin, SESSION_COOKIE } from '../auth.js';
 import type { DB } from '../db.js';
 import { BCRYPT_ROUNDS } from '../seed.js';
 
@@ -88,10 +88,12 @@ export function registerUserRoutes(app: FastifyInstance, db: DB): void {
         row.id,
       );
     }
+    // A new password or a deactivation signs the user out everywhere, except the session that
+    // made the change (an admin changing their own password stays logged in on this device).
     if (u.active === false || u.password)
-      db.prepare('DELETE FROM sessions WHERE user_id = ? AND user_id != ?').run(
+      db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(
         row.id,
-        req.user!.id,
+        req.cookies[SESSION_COOKIE] ?? '',
       );
     return toUser(db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ?`).get(row.id) as UserRow);
   });

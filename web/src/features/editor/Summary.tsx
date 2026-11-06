@@ -1,13 +1,61 @@
 import { useMemo } from 'react';
-import { formatEUR, summarize } from '@salla/shared';
+import { Star } from 'lucide-react';
+import { formatEUR, quoteTotals, summarize, type Project } from '@salla/shared';
 import { sq } from '../../i18n/sq';
-import { catalog, useEditor } from '../../model/store';
+import { activeOption, allOptions, catalog, useCatalogVersion, useEditor } from '../../model/store';
+import { QuoteEditor } from './QuoteEditor';
+
+/** Totals of every design option side by side; tap one to switch to it. */
+function OptionsComparison({ project, version }: { project: Project; version: number }) {
+  const rows = useMemo(() => {
+    const active = activeOption(project);
+    const itemsOf = (id: string) =>
+      id === active.id ? project.items : project.otherOptions!.find((o) => o.id === id)!.items;
+    return allOptions(project).map((o) => {
+      const s = summarize(itemsOf(o.id), catalog);
+      // Compare final quote totals (discount and services apply to every option).
+      const total = quoteTotals(s.total, project.pricing).total;
+      return { ...o, total, capacity: s.capacity, active: o.id === active.id };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- catalog is mutated in place
+  }, [project.items, project.otherOptions, project.option, project.pricing, version]);
+
+  return (
+    <div className="options-compare">
+      <h3>{sq.options.compareTitle}</h3>
+      <table className="summary-table">
+        <tbody>
+          {rows.map((r) => (
+            <tr
+              key={r.id}
+              className={r.active ? 'is-active' : 'clickable'}
+              onClick={() => !r.active && useEditor.getState().switchOption(r.id)}
+            >
+              <td>
+                {project.finalOptionId === r.id && (
+                  <Star size={14} className="final-star" aria-label={sq.options.final} />
+                )}
+                {r.name}
+                {r.active && <span className="pill">{sq.options.active}</span>}
+              </td>
+              <td className="mono num">{sq.summary.guests(r.capacity)}</td>
+              <td className="mono num">{formatEUR(r.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 export function Summary() {
   const items = useEditor((s) => s.project.items);
   const guestTarget = useEditor((s) => s.project.guestTarget);
-  const summary = useMemo(() => summarize(items, catalog), [items]);
+  const catalogVersion = useCatalogVersion();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- catalog is mutated in place
+  const summary = useMemo(() => summarize(items, catalog), [items, catalogVersion]);
   const missing = guestTarget ? guestTarget - summary.capacity : 0;
+  const project = useEditor((s) => s.project);
 
   return (
     <section className="panel-section">
@@ -47,6 +95,10 @@ export function Summary() {
             </tr>
           </tfoot>
         </table>
+      )}
+      {summary.lines.length > 0 && <QuoteEditor subtotal={summary.total} />}
+      {(project.otherOptions?.length ?? 0) > 0 && (
+        <OptionsComparison project={project} version={catalogVersion} />
       )}
     </section>
   );

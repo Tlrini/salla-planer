@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { sq } from '../../i18n/sq';
 import { useAutosave } from '../../model/autosave';
+import { useAvailabilitySync } from '../../model/availability';
 import { useCatalogVersion, useEditor } from '../../model/store';
 import { useUi } from '../../model/ui';
 import { CatalogSidebar } from '../catalog/CatalogSidebar';
@@ -9,6 +10,7 @@ import { BlueprintStage } from '../editor2d/BlueprintStage';
 import { useEditorKeys } from '../editor2d/useEditorKeys';
 import { ConflictDialog } from './ConflictDialog';
 import { EditorTopBar } from './EditorTopBar';
+import { OptionsBar } from './OptionsBar';
 import { PropertiesPanel } from './PropertiesPanel';
 
 // three.js is only downloaded when the 3D view is first opened.
@@ -30,9 +32,11 @@ function DrawerClose() {
 export function Editor({ kind }: { kind: 'project' | 'hall' }) {
   useCatalogVersion();
   useAutosave();
+  useAvailabilitySync();
   useEditorKeys();
   const drawer = useUi((s) => s.drawer);
   const view = useUi((s) => s.view);
+  const present = useUi((s) => s.present);
   const hasSelection = useEditor((s) => s.selection.length > 0);
 
   // On narrow screens, open the properties drawer when something gets selected.
@@ -47,19 +51,20 @@ export function Editor({ kind }: { kind: 'project' | 'hall' }) {
   }, [hasSelection]);
 
   return (
-    <div className="editor" data-drawer={drawer}>
+    <div className="editor" data-drawer={drawer} data-present={present || undefined}>
       <EditorTopBar kind={kind} />
       <aside className="sidebar sidebar-left">
         <DrawerClose />
         <CatalogSidebar kind={kind} />
       </aside>
-      <main className="canvas-area" data-view={view}>
-        {view !== '3d' && (
+      <main className="canvas-area" data-view={present ? '3d' : view}>
+        {kind === 'project' && <OptionsBar />}
+        {view !== '3d' && !present && (
           <div className="pane pane-2d">
             <BlueprintStage />
           </div>
         )}
-        {view !== '2d' && (
+        {(view !== '2d' || present) && (
           <div className="pane pane-3d">
             <Suspense fallback={<p className="viewer-loading">{sq.viewer.loading}</p>}>
               <Viewer3D />
@@ -71,7 +76,7 @@ export function Editor({ kind }: { kind: 'project' | 'hall' }) {
         <DrawerClose />
         <PropertiesPanel kind={kind} />
       </aside>
-      {kind === 'project' && <ConflictDialog />}
+      <ConflictDialog kind={kind} />
       <div className="drawer-backdrop" onClick={() => useUi.getState().set({ drawer: 'none' })} />
     </div>
   );

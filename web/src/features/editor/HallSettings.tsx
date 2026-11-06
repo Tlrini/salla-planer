@@ -2,6 +2,7 @@ import { FloorType } from '@salla/shared';
 import { sq } from '../../i18n/sq';
 import { useEditor } from '../../model/store';
 import { ColorField, NumberField, SelectField, TextField } from './fields';
+import { UnderlaySettings } from './UnderlaySettings';
 
 const FLOOR_OPTIONS = FloorType.options.map((f) => ({ value: f, label: sq.hall.floorTypes[f] }));
 
@@ -61,6 +62,7 @@ export function HallSettings() {
         value={hall.wallColor}
         onChange={(wallColor) => update({ wallColor })}
       />
+      <UnderlaySettings />
     </section>
   );
 }

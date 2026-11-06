@@ -7,26 +7,33 @@ interface HallRow {
   id: string;
   example: number;
   hall: string;
+  version: number;
+  updated_by: string | null;
 }
+
+const COLUMNS = 'id, example, hall, version, updated_by';
 
 const toTemplate = (r: HallRow): HallTemplate => ({
   id: r.id,
   example: r.example === 1,
   hall: Hall.parse(JSON.parse(r.hall)),
+  version: r.version,
+  ...(r.updated_by ? { updatedBy: r.updated_by } : {}),
 });
 
 export function registerHallRoutes(app: FastifyInstance, db: DB): void {
+  const getRow = (id: string) =>
+    db.prepare(`SELECT ${COLUMNS} FROM halls WHERE id = ?`).get(id) as HallRow | undefined;
+
   app.get('/api/halls', async () => {
     const rows = db
-      .prepare('SELECT id, example, hall FROM halls ORDER BY example DESC, updated_at DESC')
+      .prepare(`SELECT ${COLUMNS} FROM halls ORDER BY example DESC, updated_at DESC`)
       .all() as HallRow[];
     return rows.map(toTemplate);
   });
 
   app.get<{ Params: { id: string } }>('/api/halls/:id', async (req, reply) => {
-    const row = db
-      .prepare('SELECT id, example, hall FROM halls WHERE id = ?')
-      .get(req.params.id) as HallRow | undefined;
+    const row = getRow(req.params.id);
     if (!row) return reply.code(404).send({ error: 'not_found' });
     return toTemplate(row);
   });
@@ -38,30 +45,49 @@ export function registerHallRoutes(app: FastifyInstance, db: DB): void {
     const now = new Date().toISOString();
     const id = nanoid();
     db.prepare(
-      'INSERT INTO halls (id, example, hall, created_at, updated_at) VALUES (?, 0, ?, ?, ?)',
-    ).run(id, JSON.stringify(body.data.hall), now, now);
-    return reply
-      .code(201)
-      .send({ id, example: false, hall: body.data.hall } satisfies HallTemplate);
+      'INSERT INTO halls (id, example, hall, created_at, updated_at, version, updated_by) VALUES (?, 0, ?, ?, ?, 1, ?)',
+    ).run(id, JSON.stringify(body.data.hall), now, now, req.user!.displayName);
+    return reply.code(201).send(toTemplate(getRow(id)!));
   });
 
   app.put<{ Params: { id: string } }>('/api/halls/:id', async (req, reply) => {
     const body = HallInput.safeParse(req.body);
     if (!body.success)
       return reply.code(400).send({ error: 'invalid_body', issues: body.error.issues });
+    const current = getRow(req.params.id);
+    if (!current) return reply.code(404).send({ error: 'not_found' });
+    // The built-in "Shembull" halls are shared starting points: only admins change them.
+    if (current.example === 1 && req.user!.role !== 'admin')
+      return reply.code(403).send({ error: 'forbidden' });
+
+    // Optimistic locking like projects: with a version, never overwrite a newer save.
+    const { version } = body.data;
     const r = db
-      .prepare('UPDATE halls SET hall = ?, updated_at = ? WHERE id = ?')
-      .run(JSON.stringify(body.data.hall), new Date().toISOString(), req.params.id);
-    if (r.changes === 0) return reply.code(404).send({ error: 'not_found' });
-    const row = db
-      .prepare('SELECT id, example, hall FROM halls WHERE id = ?')
-      .get(req.params.id) as HallRow;
+      .prepare(
+        `UPDATE halls SET hall = @hall, updated_at = @now, updated_by = @who, version = version + 1
+         WHERE id = @id ${version === undefined ? '' : 'AND version = @version'}`,
+      )
+      .run({
+        hall: JSON.stringify(body.data.hall),
+        now: new Date().toISOString(),
+        who: req.user!.displayName,
+        id: req.params.id,
+        ...(version === undefined ? {} : { version }),
+      });
+    const row = getRow(req.params.id)!;
+    if (r.changes === 0)
+      return reply
+        .code(409)
+        .send({ error: 'conflict', updatedBy: row.updated_by ?? '', version: row.version });
     return toTemplate(row);
   });
 
   app.delete<{ Params: { id: string } }>('/api/halls/:id', async (req, reply) => {
-    const r = db.prepare('DELETE FROM halls WHERE id = ?').run(req.params.id);
-    if (r.changes === 0) return reply.code(404).send({ error: 'not_found' });
+    const current = getRow(req.params.id);
+    if (!current) return reply.code(404).send({ error: 'not_found' });
+    if (current.example === 1 && req.user!.role !== 'admin')
+      return reply.code(403).send({ error: 'forbidden' });
+    db.prepare('DELETE FROM halls WHERE id = ?').run(req.params.id);
     return { ok: true };
   });
 }

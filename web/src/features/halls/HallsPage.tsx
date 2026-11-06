@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pencil, Plus, Trash } from 'lucide-react';
+import { Copy, Pencil, Plus, Trash } from 'lucide-react';
 import { formatMeters, type Hall, type HallTemplate } from '@salla/shared';
 import { api } from '../../api/client';
 import { sq } from '../../i18n/sq';
 import { navigate } from '../../model/router';
+import { useSession } from '../../model/session';
 import { ConfirmDialog } from '../editor/ConfirmDialog';
 import { AppShell } from '../shell/AppShell';
 
@@ -22,6 +23,9 @@ export function HallsPage() {
   const [halls, setHalls] = useState<HallTemplate[] | null>(null);
   const [error, setError] = useState(false);
   const [toDelete, setToDelete] = useState<HallTemplate | null>(null);
+  const isAdmin = useSession((s) => s.user?.role === 'admin');
+  // Example halls are admin-only; agents adapt a copy.
+  const canEdit = (t: HallTemplate) => isAdmin || !t.example;
 
   const load = useCallback(async () => {
     try {
@@ -38,6 +42,13 @@ export function HallsPage() {
   const create = async () => {
     const t = await api.post<HallTemplate>('/api/halls', { hall: NEW_HALL });
     navigate({ name: 'hall', id: t.id });
+  };
+
+  const copy = async (t: HallTemplate) => {
+    const created = await api.post<HallTemplate>('/api/halls', {
+      hall: { ...t.hall, name: `${t.hall.name}${sq.project.copySuffix}` },
+    });
+    navigate({ name: 'hall', id: created.id });
   };
 
   const remove = async () => {
@@ -64,7 +75,8 @@ export function HallsPage() {
             <button
               type="button"
               className="card-main"
-              onClick={() => navigate({ name: 'hall', id: t.id })}
+              onClick={() => (canEdit(t) ? navigate({ name: 'hall', id: t.id }) : void copy(t))}
+              title={canEdit(t) ? sq.halls.edit : sq.halls.exampleAdminOnly}
             >
               <span className="card-title">
                 {t.hall.name} {t.example && <span className="pill">{sq.halls.example}</span>}
@@ -80,24 +92,37 @@ export function HallsPage() {
             </button>
             <div className="card-side">
               <div className="card-actions">
+                {canEdit(t) && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    onClick={() => navigate({ name: 'hall', id: t.id })}
+                    title={sq.halls.edit}
+                    aria-label={sq.halls.edit}
+                  >
+                    <Pencil size={18} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="icon-btn"
-                  onClick={() => navigate({ name: 'hall', id: t.id })}
-                  title={sq.halls.edit}
-                  aria-label={sq.halls.edit}
+                  onClick={() => void copy(t)}
+                  title={canEdit(t) ? sq.halls.copy : sq.halls.copyToEdit}
+                  aria-label={`${sq.halls.copy}: ${t.hall.name}`}
                 >
-                  <Pencil size={18} />
+                  <Copy size={18} />
                 </button>
-                <button
-                  type="button"
-                  className="icon-btn btn-danger"
-                  onClick={() => setToDelete(t)}
-                  title={sq.halls.delete}
-                  aria-label={sq.halls.delete}
-                >
-                  <Trash size={18} />
-                </button>
+                {canEdit(t) && (
+                  <button
+                    type="button"
+                    className="icon-btn btn-danger"
+                    onClick={() => setToDelete(t)}
+                    title={sq.halls.delete}
+                    aria-label={sq.halls.delete}
+                  >
+                    <Trash size={18} />
+                  </button>
+                )}
               </div>
             </div>
           </li>

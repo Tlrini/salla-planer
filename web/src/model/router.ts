@@ -5,6 +5,10 @@ export type Route =
   | { name: 'project'; id: string }
   | { name: 'halls' }
   | { name: 'hall'; id: string }
+  | { name: 'library' }
+  | { name: 'calendar' }
+  | { name: 'dashboard' }
+  | { name: 'share'; token: string }
   | { name: 'admin' };
 
 /** Parses "#/projects/abc" style hashes. Unknown paths go to the project list. */
@@ -14,6 +18,10 @@ export function parseRoute(hash: string): Route {
   if (a === 'projects' && b) return { name: 'project', id: b };
   if (a === 'halls' && b) return { name: 'hall', id: b };
   if (a === 'halls') return { name: 'halls' };
+  if (a === 'library') return { name: 'library' };
+  if (a === 'calendar') return { name: 'calendar' };
+  if (a === 'dashboard') return { name: 'dashboard' };
+  if (a === 'share' && b) return { name: 'share', token: b };
   if (a === 'admin') return { name: 'admin' };
   return { name: 'projects' };
 }
@@ -26,6 +34,14 @@ export function routePath(r: Route): string {
       return `#/halls/${encodeURIComponent(r.id)}`;
     case 'halls':
       return '#/halls';
+    case 'library':
+      return '#/library';
+    case 'calendar':
+      return '#/calendar';
+    case 'dashboard':
+      return '#/dashboard';
+    case 'share':
+      return `#/share/${encodeURIComponent(r.token)}`;
     case 'admin':
       return '#/admin';
     default:

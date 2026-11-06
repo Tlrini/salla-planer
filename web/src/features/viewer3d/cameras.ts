@@ -50,3 +50,93 @@ export function cameraFor(
   const lz = Math.min(L - 0.5, Math.max(0.5, look[1]!));
   return { position, target: [lx, 1.2, lz] };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Eye-level walking (Beta 3)
+
+export interface Pose {
+  /** Plan position (m). */
+  x: number;
+  y: number;
+  /** Degrees: yaw clockwise from "up the plan" (−y), pitch up (+) / down (−). */
+  yaw: number;
+  pitch: number;
+  /**
+   * What the view is about (3D point). If the spot is taken and the visitor ends up elsewhere,
+   * the view is re-aimed at this point.
+   */
+  look?: Vec3;
+}
+
+const RAD = 180 / Math.PI;
+
+/** Yaw/pitch of an eye at plan (x, y), height EYE_HEIGHT, looking at a 3D point (x, height, z). */
+export function poseLookingAt(x: number, y: number, target: Vec3): Pose {
+  const dx = target[0] - x;
+  const dz = target[2] - y;
+  const yaw = Math.atan2(dx, -dz) * RAD;
+  const pitch = Math.atan2(target[1] - EYE_HEIGHT, Math.hypot(dx, dz)) * RAD;
+  return {
+    x,
+    y,
+    yaw: Math.round(yaw * 10) / 10,
+    pitch: Math.round(pitch * 10) / 10,
+    look: target,
+  };
+}
+
+/** Camera Euler angles (order YXZ) for a pose. */
+export function poseEuler(p: Pick<Pose, 'yaw' | 'pitch'>): [number, number, number] {
+  return [p.pitch / RAD, -p.yaw / RAD, 0];
+}
+
+/** Plan direction of a yaw (unit vector). */
+export function yawDirection(yaw: number): { x: number; y: number } {
+  return { x: Math.sin(yaw / RAD), y: -Math.cos(yaw / RAD) };
+}
+
+/** Where the visitor stands right now in walk mode (read by the 360° export). */
+export const walkState: { last: Pose | null } = { last: null };
+
+export type AutoViewpointKey = 'entrance' | 'headTable' | 'danceFloor' | 'stage';
+
+/**
+ * Ready-made eye-level views derived from the layout: the entrance, in front of the couple's
+ * table, on the dance floor and in front of the stage. Positions are not yet collision-checked.
+ */
+export function autoViewpoints(
+  hall: Hall,
+  items: readonly Item[],
+): Array<{ key: AutoViewpointKey; pose: Pose }> {
+  const out: Array<{ key: AutoViewpointKey; pose: Pose }> = [];
+  const entrance = cameraFor('entrance', hall, items);
+  out.push({
+    key: 'entrance',
+    pose: poseLookingAt(entrance.position[0], entrance.position[2], entrance.target),
+  });
+
+  const front = (item: Item, distance: number): { x: number; y: number } => {
+    const r = (item.rotation * Math.PI) / 180;
+    // Local +y (the open side of a head table, the audience side of a stage) in plan space.
+    const ly = item.depth / 2 + distance;
+    return { x: item.x - ly * Math.sin(r), y: item.y + ly * Math.cos(r) };
+  };
+
+  const head = items.find((i) => i.type === 'table_head');
+  if (head) {
+    const p = front(head, 3);
+    out.push({ key: 'headTable', pose: poseLookingAt(p.x, p.y, [head.x, 1.1, head.y]) });
+  }
+  const stage = items.find((i) => i.type === 'stage');
+  const dance = items.find((i) => i.type === 'dance_floor');
+  if (dance) {
+    const look = stage ?? head;
+    const target: Vec3 = look ? [look.x, 1.2, look.y] : [hall.width / 2, 1.2, hall.length / 2];
+    out.push({ key: 'danceFloor', pose: poseLookingAt(dance.x, dance.y, target) });
+  }
+  if (stage) {
+    const p = front(stage, 4);
+    out.push({ key: 'stage', pose: poseLookingAt(p.x, p.y, [stage.x, 1.4, stage.y]) });
+  }
+  return out;
+}

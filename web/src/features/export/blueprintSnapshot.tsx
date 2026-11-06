@@ -2,10 +2,20 @@ import { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import type Konva from 'konva';
 import { Layer, Rect, Stage } from 'react-konva';
-import { autoLabels, halfExtents, type CatalogItem, type Hall, type Item } from '@salla/shared';
+import {
+  autoLabels,
+  halfExtents,
+  type Annotation,
+  type CatalogItem,
+  type Hall,
+  type Item,
+} from '@salla/shared';
 import { HallLayer } from '../editor2d/HallLayer';
+import { AnnotationLayer } from '../editor2d/AnnotationLayer';
+import { tablesUnderDecor } from '../editor2d/BlueprintStage';
 import { ItemNode } from '../editor2d/ItemNode';
 import { BLUEPRINT, CM, layerRank } from '../editor2d/units';
+import { preloadImages } from '../editor2d/images';
 
 export interface BlueprintImage {
   url: string;
@@ -25,7 +35,9 @@ function Plan({
   height,
   pixelRatio,
   onDone,
+  annotations,
 }: {
+  annotations: readonly Annotation[];
   hall: Hall;
   items: readonly Item[];
   catalog: ReadonlyMap<string, CatalogItem>;
@@ -42,6 +54,7 @@ function Plan({
   const x = (width - hall.width * CM * scale) / 2;
   const y = (height - hall.length * CM * scale) / 2;
   const labels = autoLabels(items, catalog);
+  const decorated = tablesUnderDecor(items);
   const sorted = [...items].sort((a, b) => layerRank(a.type) - layerRank(b.type));
 
   useEffect(() => {
@@ -63,6 +76,7 @@ function Plan({
       </Layer>
       <Layer listening={false} x={x} y={y} scaleX={scale} scaleY={scale}>
         <HallLayer hall={hall} scale={scale} />
+        <AnnotationLayer annotations={annotations} scale={scale} only="below" />
         {sorted.map((item) => {
           const cat = catalog.get(item.type);
           const ext = halfExtents(item, cat);
@@ -73,6 +87,8 @@ function Plan({
               cat={cat}
               selected={false}
               label={item.label?.trim() || labels.get(item.id)}
+              decor={item.tableDecor ? catalog.get(item.tableDecor) : undefined}
+              decorated={decorated.has(item.id)}
               showName={ext.hx * 2 >= 1.5 && ext.hy * 2 >= 0.25}
               dragBoundFunc={passThrough}
               onPointerDown={noop}
@@ -81,6 +97,7 @@ function Plan({
             />
           );
         })}
+        <AnnotationLayer annotations={annotations} scale={scale} only="above" />
       </Layer>
     </Stage>
   );
@@ -90,12 +107,25 @@ function Plan({
  * Renders the 2D blueprint (with labels and dimensions) off-screen at high resolution,
  * independent of the live editor's zoom and selection.
  */
-export function renderBlueprint(
+export async function renderBlueprint(
   hall: Hall,
   items: readonly Item[],
   catalog: ReadonlyMap<string, CatalogItem>,
-  { width = 1600, pixelRatio = 2.5 }: { width?: number; pixelRatio?: number } = {},
+  {
+    width = 1600,
+    pixelRatio = 2.5,
+    annotations = [],
+  }: { width?: number; pixelRatio?: number; annotations?: readonly Annotation[] } = {},
 ): Promise<BlueprintImage> {
+  // The floor-plan photo is a drawing aid, not part of the printed plan.
+  hall = { ...hall, underlay: undefined };
+  // Top views of scanned decor must be loaded before the one-shot draw.
+  await preloadImages(
+    items.flatMap((i) => [
+      catalog.get(i.type)?.topView,
+      i.tableDecor ? catalog.get(i.tableDecor)?.topView : undefined,
+    ]),
+  );
   const height = Math.round(((width - 2 * PAD) * hall.length) / hall.width + 2 * PAD);
   const host = document.createElement('div');
   const root = createRoot(host);
@@ -114,6 +144,7 @@ export function renderBlueprint(
           height={height}
           pixelRatio={pixelRatio}
           onDone={done}
+          annotations={annotations}
         />,
       );
     } catch (err) {

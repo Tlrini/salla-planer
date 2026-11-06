@@ -15,11 +15,55 @@ All phases from AGENTS.md §14 are built:
 | 4 Export    | 3-page A4 PDF (plan, two 1920×1080 3D renders, priced list), PNG of plan and 3D                                                 |
 | 5 Polish    | GLB upload per catalog item, auto-layout of tables, warnings badge, Docker, nightly backups, Playwright smoke test              |
 
+### Beta (AGENTS.md §16)
+
+| Sub-phase                   | What works                                                                                                                                                                |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Beta 0 Cloud                | Caddy HTTPS in docker-compose, proxy-aware login limit, `/uploads` behind login, strong first-admin password, S3/Blob backup script, AWS guide                            |
+| Beta 1 Decor library        | **Biblioteka**: any agent uploads a `.glb` from a phone scan app, sets it upright + real height, thumbnails; shared by the whole agency                                   |
+| Beta 2 Table decor, options | "Dekori i tavolinës" per table or for all tables of a type, priced per piece; **Opsioni A / B / C** with side-by-side totals and a final choice                           |
+| Beta 3 Walk mode            | **Ec nëpër sallë**: Street-View-style eye-level walk (tap the floor, drag to look, WASD), viewpoints; **E lartë** adds ambient occlusion, evening glow and edge smoothing |
+| Beta 4 Presentation         | **Prezantim** full screen for the client, **360°** panorama JPEG (photo-sphere metadata), **tour video** (MP4/WebM), PDF with eye-level views and option comparison       |
+| Beta 5 In-page scanning     | Not started: needs the decision on the photogrammetry tool licence and the GPU setup (see AGENTS.md §16)                                                                  |
+
+### More features (after the beta)
+
+| Feature               | Where                                                            | What it does                                                                                                                                                         |
+| --------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guests and seating    | Editor → _Projekti_ → _Të ftuarit dhe ulja_                      | Paste / CSV import, groups, RSVP, tap-to-seat, automatic seating by group, "T1 · 8/10" on the plan, seating chart + alphabetical list in the PDF                     |
+| Inventory             | _Administrimi_ → _Stoku_ (and library setup)                     | Stock per item; the warnings badge shows shortages including other confirmed events on the same date                                                                 |
+| Calendar              | _Kalendari_                                                      | Month view of all events; days where booked events need more than the stock are flagged                                                                              |
+| Team checklist        | _Projekti_ → _Lista e punës_                                     | Loaded / installed / returned per line, tasks with assignee, "mark installed", loading sheet PDF                                                                     |
+| Payments and contract | _Projekti_ → _Pagesat dhe kontrata_; _Administrimi_ → _Agjencia_ | Deposit %, payments, balance, contract PDF with the agency details; "Paguar 40%" in the project list                                                                 |
+| Version history       | _Projekti_ → _Historiku_                                         | Automatic snapshots (≤ 1 per 10 min or when someone else edits), restore keeps payments and status                                                                   |
+| Client share link     | _Projekti_ → _Ndaj me klientin_                                  | Private 30-day link: the client walks the 3D hall on their phone without an account, compares options with totals, approves and comments; badges in the project list |
+| Floor-plan photo      | Hall settings → _Plani i sallës (foto)_                          | Photo/scan of the real plan under the blueprint, opacity, two-point scale calibration                                                                                |
+| Plan annotations      | Ruler / T / dashed-square buttons on the plan                    | Measurements, texts and coloured zones; editable, undoable, printed in the PDF                                                                                       |
+| Dashboard             | _Paneli_ (admins)                                                | Contracted vs. collected per month, open offers, conversion, top decor, agents, upcoming events                                                                      |
+
+### Using the beta features
+
+- **Scanned decor:** _Biblioteka → Ngarko skanim (.glb)_. Export the scan as `.glb` from the
+  phone app (e.g. Scaniverse, Polycam). In the setup dialog turn it upright (_Ngrije_), type the
+  real height, tick _Vendoset mbi tavolinë_ for centerpieces, save. It then appears for every
+  agent in the editor under _Dekoret e skanuara_.
+- **Decor on tables:** select a table → _Dekori i tavolinës_ → pick the decor →
+  _Apliko te të gjitha tavolinat e këtij lloji_. Select several tables (Ctrl+A or Shift+drag) to
+  set them at once.
+- **Options:** the bar above the plan: `+` copies the current layout to a new option; switch
+  between them; `…` renames, deletes or marks the client's choice (star). The summary compares
+  the totals; the PDF gets a comparison page.
+- **Walk with the client:** 3D → _Ec nëpër sallë_. Tap the floor to walk, drag to look around,
+  use the viewpoint chips, _Ruaj këtë pamje_ to save a view, _Regjistro video të turit_ for a
+  video. _Prezantim_ shows only the 3D walk in full screen (Esc to leave).
+- **360°:** export menu (arrow next to _Eksporto PDF_) → _Shkarko 360° (panoramë)_, taken from
+  where you stand in walk mode (or the entrance).
+
 ## Requirements
 
-Node.js 22 LTS. On this PC it is installed per user in
-`%LOCALAPPDATA%\Programs\node-v22.23.4-win-x64` and added to the user PATH (open a new terminal
-after installing). Git is in `%LOCALAPPDATA%\Programs\Git`.
+Node.js 22 LTS or newer (this PC has Node 24 in `C:\Program Files\nodejs`). `npm install` /
+`npm ci` work without Visual Studio: `.npmrc` skips native build scripts because
+better-sqlite3 and bcrypt ship prebuilt binaries.
 
 ## Development
 
@@ -51,21 +95,32 @@ npm run build
 npm start                   # http://<this-PC-IP>:3000
 ```
 
-## Production with Docker
+## Production with Docker (cloud, HTTPS)
 
 ```bash
-cp .env.example .env        # set ADMIN_PASSWORD
+cp .env.example .env        # set DOMAIN and a strong ADMIN_PASSWORD (12+ characters)
 docker compose up -d --build
 ```
 
+Caddy serves the app on `https://<DOMAIN>` with an automatic Let's Encrypt certificate (ports 80
+and 443 must be open). With `DOMAIN=localhost` you can try it on your own PC
+(`https://localhost`, Caddy's local certificate).
+
 Everything persistent is in `data/` (mounted as a volume): `app.db` (SQLite), `uploads/models/`
-(GLB files) and `backups/app-YYYY-MM-DD.db` (one copy per day, last 14 kept). To back up the whole
-app, copy the `data/` folder.
+(GLB files) and `backups/app-YYYY-MM-DD.db` (one copy per day, last 14 kept).
+`deploy/backup-sync.sh` copies backups and uploads to S3 or Azure Blob; run it daily from cron.
 
 ## Notes
 
 - PDF fonts: the bundled Figtree / Cormorant Garamond WOFF files are converted to TTF in the
   browser and embedded, so ë, ç and € print correctly; nothing is downloaded at runtime.
+- 3D quality: _Normale_ is the plain renderer (tablets). _E lartë_ adds ambient occlusion
+  (n8ao), bloom on lights in _Mbrëmje_ and SMAA edge smoothing at 1× resolution (~19 ms per
+  frame for 20 tables on an Intel Iris Xe). PDF/PNG renders always use these effects; the 360°
+  panorama does not (screen-space effects would show seams between the cube faces). Floors have
+  generated relief and roughness maps, tablecloths have soft folds.
+- Reflections use the bundled HDRI `web/public/env/ballroom_1k.hdr` ("Ballroom" by Sergej
+  Majboroda, [Poly Haven](https://polyhaven.com/a/ballroom), CC0).
 - Uploaded `.glb` models are scaled to the item's width × depth × height. Draco-compressed GLB
   files are not supported (the decoder would need a CDN).
 - Editor shortcuts: Delete/Backspace remove · Ctrl+D duplicate · Ctrl+Z undo · Ctrl+Shift+Z /

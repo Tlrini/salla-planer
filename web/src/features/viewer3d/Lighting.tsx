@@ -1,8 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { use, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { useThree } from '@react-three/fiber';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Hall, Item } from '@salla/shared';
+import { loadedHdri, loadHdri } from './environment';
 import { WARM_LIGHT } from './resources';
 
 /** Max real point lights in the evening (plus hemisphere, ambient and one directional). */
@@ -12,40 +13,69 @@ interface Props {
   hall: Hall;
   items: readonly Item[];
   evening: boolean;
+  /** Off-screen renders: suspend until the HDRI has loaded. */
+  waitForEnv?: boolean;
 }
 
-/** Day: bright neutral with one shadow-casting sun. Evening: dark ambient, warm chandeliers. */
 /**
- * Procedural studio environment (three's RoomEnvironment, generated locally — no HDR download)
- * so metallic gold and glass have something to reflect.
+ * Reflections: the bundled ballroom HDRI (see environment.ts). Until it has loaded, or if it is
+ * missing, three's RoomEnvironment (generated locally) stands in so metal and glass never look
+ * flat. Off-screen renders pass `waitForEnv` and suspend until the HDRI is there.
  */
-function useRoomEnvironment(evening: boolean) {
+function useEnvironment(evening: boolean, waitForEnv: boolean) {
   const gl = useThree((s) => s.gl);
   const scene = useThree((s) => s.scene);
   const invalidate = useThree((s) => s.invalidate);
+  const [hdri, setHdri] = useState(loadedHdri);
+  useEffect(() => {
+    let alive = true;
+    if (!hdri) void loadHdri().then((t) => alive && t && setHdri(t));
+    return () => {
+      alive = false;
+    };
+  }, [hdri]);
+  // React 19 `use` may be called conditionally: only exports wait for the file.
+  const source = waitForEnv ? use(loadHdri()) : hdri;
+
   const env = useMemo(() => {
     const pmrem = new THREE.PMREMGenerator(gl);
-    const room = new RoomEnvironment();
-    const target = pmrem.fromScene(room, 0.04);
-    room.dispose();
+    let target: THREE.WebGLRenderTarget;
+    if (source) {
+      target = pmrem.fromEquirectangular(source);
+    } else {
+      const room = new RoomEnvironment();
+      target = pmrem.fromScene(room, 0.04);
+      room.dispose();
+    }
     pmrem.dispose();
-    return target;
-  }, [gl]);
+    return { target, real: !!source };
+  }, [gl, source]);
   useEffect(() => {
-    scene.environment = env.texture;
+    scene.environment = env.target.texture;
+    invalidate();
     return () => {
       scene.environment = null;
-      env.dispose();
+      env.target.dispose();
     };
-  }, [scene, env]);
+  }, [scene, env, invalidate]);
   useEffect(() => {
-    scene.environmentIntensity = evening ? 0.12 : 0.55;
+    scene.environmentIntensity = env.real
+      ? evening
+        ? HDRI_INTENSITY.evening
+        : HDRI_INTENSITY.day
+      : evening
+        ? 0.12
+        : 0.55;
     invalidate();
-  }, [scene, evening, invalidate]);
+  }, [scene, evening, env, invalidate]);
 }
 
-export function Lighting({ hall, items, evening }: Props) {
-  useRoomEnvironment(evening);
+/** HDRI brightness (the photo is brighter than the generated studio light). */
+const HDRI_INTENSITY = { day: 0.55, evening: 0.12 };
+
+/** Day: bright neutral with one shadow-casting sun. Evening: dark ambient, warm chandeliers. */
+export function Lighting({ hall, items, evening, waitForEnv = false }: Props) {
+  useEnvironment(evening, waitForEnv);
   const W = hall.width;
   const L = hall.length;
   const H = hall.height;

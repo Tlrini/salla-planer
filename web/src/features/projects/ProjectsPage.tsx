@@ -136,6 +136,17 @@ export function ProjectsPage() {
             </button>
             <div className="card-side">
               <span className={`status status-${p.status}`}>{sq.statuses[p.status]}</span>
+              {p.clientApproved !== undefined && (
+                <span className="pill pill-ok">{sq.share.badgeApproved(p.clientApproved)}</span>
+              )}
+              {p.clientComments ? (
+                <span className="pill pill-warn">{sq.share.badgeComments(p.clientComments)}</span>
+              ) : null}
+              {p.paid > 0 && p.quoteTotal > 0 && (
+                <span className={`pill${p.paid >= p.quoteTotal ? ' pill-ok' : ''}`}>
+                  {sq.payments.badge(Math.min(100, Math.round((p.paid / p.quoteTotal) * 100)))}
+                </span>
+              )}
               <div className="card-actions">
                 <button
                   type="button"

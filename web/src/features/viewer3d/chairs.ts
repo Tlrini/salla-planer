@@ -17,6 +17,8 @@ export function collectChairs(items: readonly Item[], catalog: CatalogMap): Chai
   for (const item of items) {
     const cat = catalog.get(item.type);
     if (item.type === 'chair') {
+      // A chair with an uploaded model is drawn by GlbInstances instead.
+      if (cat?.modelFile) continue;
       out.push({
         x: item.x,
         y: item.y,

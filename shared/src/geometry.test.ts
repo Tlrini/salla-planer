@@ -18,7 +18,24 @@ import {
   snap,
   snapAngle,
   summarize,
+  isTabletop,
+  uniformModelSize,
+  decorPositions,
+  tableDecorItems,
+  walkArea,
+  isWalkable,
+  walkTarget,
+  isPathClear,
+  walkStep,
+  yawWrap,
+  WALL_MARGIN,
+  quoteTotals,
+  usageOf,
+  addUsage,
+  shortages,
+  projectFinance,
 } from './geometry.js';
+import type { CatalogItem } from './schemas.js';
 
 const cat = catalogById(DEFAULT_CATALOG);
 const mk = (type: string, x: number, y: number, extra: Partial<Item> = {}): Item => {
@@ -254,5 +271,193 @@ describe('findFreeSpot spacing', () => {
       items.push({ ...t, ...findFreeSpot(t, { x: 15, y: 9 }, items, hall, cat) });
     }
     expect(layoutWarnings(items, cat)).toEqual([]);
+  });
+});
+
+describe('library decor (Beta 1)', () => {
+  const peony: CatalogItem = {
+    id: 'lib_peony',
+    name: 'Peonia rozë',
+    category: 'floral',
+    width: 0.37,
+    depth: 0.37,
+    height: 0.46,
+    shape2d: 'circle',
+    resizable: 'none',
+    defaultColor: '#FFFFFF',
+    price: 28,
+    active: true,
+    source: 'library',
+    tabletop: true,
+    scaleMode: 'uniform',
+  };
+  const withPeony = new Map([...cat, [peony.id, peony]]);
+
+  it('keeps the scan proportions from the real height', () => {
+    expect(uniformModelSize({ x: 36.8, y: 46, z: 36.8 }, 0.46)).toEqual({
+      width: 0.368,
+      depth: 0.368,
+      height: 0.46,
+    });
+    expect(uniformModelSize({ x: 1, y: 0, z: 1 }, 1)).toEqual({ width: 0, depth: 0, height: 0 });
+  });
+
+  it('knows which items stand on tables (flag, or built-in fallback)', () => {
+    expect(isTabletop(peony)).toBe(true);
+    expect(isTabletop({ ...cat.get('centerpiece')!, tabletop: undefined })).toBe(true);
+    expect(isTabletop(cat.get('stage'))).toBe(false);
+    expect(isTabletop(undefined)).toBe(false);
+  });
+
+  it('a scanned centerpiece on a table stands on the table top and is no overlap', () => {
+    const table = mk('table_round_10', 5, 5);
+    const decor: Item = {
+      ...mk('centerpiece', 5, 5),
+      id: 'p',
+      type: peony.id,
+      width: 0.37,
+      depth: 0.37,
+    };
+    expect(supportHeight(decor, [table, decor], withPeony)).toBe(0.75);
+    expect(overlappingPairs([table, decor], withPeony)).toEqual([]);
+    // Placing it next to a table does not push it away from the table.
+    const spot = findFreeSpot(decor, { x: 5, y: 5 }, [table], { width: 20, length: 20 }, withPeony);
+    expect(spot).toEqual({ x: 5, y: 5 });
+  });
+
+  it('prices library decor in the summary by its catalog price', () => {
+    const decor: Item = { ...mk('centerpiece', 5, 5), id: 'p', type: peony.id };
+    const s = summarize([decor, { ...decor, id: 'q' }], [...withPeony.values()]);
+    expect(s.lines.find((l) => l.type === peony.id)).toMatchObject({
+      name: 'Peonia rozë',
+      quantity: 2,
+      total: 56,
+    });
+  });
+});
+
+describe('table decor (Beta 2)', () => {
+  it('one piece on a round table, about one per 2 m along long tables', () => {
+    expect(decorPositions(mk('table_round_10', 5, 5), cat.get('table_round_10'))).toEqual([
+      { x: 0, y: 0 },
+    ]);
+    const imperial = mk('table_imperial', 10, 5, { width: 6 });
+    expect(decorPositions(imperial, cat.get('table_imperial'))).toEqual([
+      { x: -2, y: 0 },
+      { x: 0, y: 0 },
+      { x: 2, y: 0 },
+    ]);
+    expect(decorPositions(mk('stage', 5, 5), cat.get('stage'))).toEqual([]);
+  });
+
+  it('turns table decor into placed items that follow the table rotation', () => {
+    const t = mk('table_imperial', 10, 5, { width: 4, rotation: 90, tableDecor: 'centerpiece' });
+    const decor = tableDecorItems([t], cat);
+    expect(decor.map((d) => [d.type, d.x, d.y, d.rotation])).toEqual([
+      ['centerpiece', 10, 4, 90],
+      ['centerpiece', 10, 6, 90],
+    ]);
+    expect(tableDecorItems([{ ...t, tableDecor: 'unknown' }], cat)).toEqual([]);
+  });
+
+  it('prices decor per piece in the summary', () => {
+    const tables = [1, 2, 3].map((i) =>
+      mk('table_round_10', i * 4, 5, { tableDecor: 'centerpiece' }),
+    );
+    const s = summarize(tables, DEFAULT_CATALOG);
+    expect(s.lines.find((l) => l.type === 'centerpiece')).toMatchObject({
+      quantity: 3,
+      total: 105,
+    });
+    expect(s.capacity).toBe(30);
+  });
+});
+
+describe('walking through the hall (Beta 3)', () => {
+  const hall = { width: 20, length: 14, structure: [mk('column', 15, 3)] };
+  const table = mk('table_round_10', 6, 7);
+  const dance = mk('dance_floor', 12, 9, { width: 4, depth: 4 });
+  const area = walkArea(hall, [table, dance, mk('chandelier', 6, 7)], cat);
+
+  it('tables (with chairs) and columns block; dance floor and chandeliers do not', () => {
+    expect(area.obstacles).toHaveLength(2);
+    expect(isWalkable({ x: 6, y: 7 }, area)).toBe(false); // table
+    expect(isWalkable({ x: 6, y: 5.4 }, area)).toBe(false); // a chair
+    expect(isWalkable({ x: 12, y: 9 }, area)).toBe(true); // on the dance floor
+    expect(isWalkable({ x: 15, y: 3 }, area)).toBe(false); // column
+    expect(isWalkable({ x: 0.1, y: 7 }, area)).toBe(false); // wall
+  });
+
+  it('a tap on a table or a wall resolves to the nearest free spot', () => {
+    const p = walkTarget({ x: 6, y: 7 }, area)!;
+    expect(isWalkable(p, area)).toBe(true);
+    expect(Math.hypot(p.x - 6, p.y - 7)).toBeLessThan(2);
+    expect(walkTarget({ x: -5, y: 7 }, area)).toEqual({ x: WALL_MARGIN, y: 7 });
+  });
+
+  it('knows when furniture is in the way (then the view jumps instead of gliding)', () => {
+    expect(isPathClear({ x: 2, y: 7 }, { x: 10, y: 7 }, area)).toBe(false);
+    expect(isPathClear({ x: 2, y: 12 }, { x: 10, y: 12 }, area)).toBe(true);
+  });
+
+  it('keyboard steps slide along obstacles instead of passing through', () => {
+    const at = { x: 3, y: 7.1 };
+    // Straight into the table: blocked, stays put.
+    expect(walkStep(at, { x: 4.6, y: 7.1 }, area)).toEqual(at);
+    // Diagonally into a wall: slides along it.
+    expect(walkStep({ x: 0.5, y: 3 }, { x: 0.2, y: 3.2 }, area)).toEqual({ x: 0.5, y: 3.2 });
+    expect(yawWrap(-90)).toBe(270);
+    expect(yawWrap(370)).toBe(10);
+  });
+});
+
+describe('quote totals', () => {
+  it('subtracts the discount and adds extra services (cents rounded)', () => {
+    const q = quoteTotals(1110, {
+      discountPercent: 10,
+      extras: [
+        { label: ' Transport dhe montim ', amount: 150 },
+        { label: 'Bosh', amount: 0 },
+      ],
+    });
+    expect(q).toEqual({
+      subtotal: 1110,
+      discountPercent: 10,
+      discount: 111,
+      extras: [{ label: 'Transport dhe montim', amount: 150 }],
+      total: 1149,
+    });
+    expect(quoteTotals(99.99, { discountPercent: 12.5 }).total).toBe(87.49);
+    expect(quoteTotals(500).total).toBe(500);
+    expect(quoteTotals(100, { discountPercent: 150 }).discount).toBe(100);
+  });
+});
+
+describe('inventory', () => {
+  it('counts what a layout needs (auto chairs included) and finds shortages', () => {
+    const items = [mk('table_round_10', 5, 5), mk('table_round_10', 10, 5), mk('stage', 15, 2)];
+    const need = usageOf(items, DEFAULT_CATALOG);
+    expect(need.get('chair')).toBe(20);
+    expect(need.get('table_round_10')).toBe(2);
+    const stocked = new Map([...cat].map(([k, v]) => [k, k === 'chair' ? { ...v, stock: 25 } : v]));
+    expect(shortages(need, new Map(), stocked)).toEqual([]);
+    const taken = addUsage(new Map([['chair', 10]]), new Map([['chair', 4]]));
+    expect(shortages(need, taken, stocked)).toEqual([
+      { type: 'chair', name: 'Karrige', stock: 25, need: 20, taken: 14, missing: 9 },
+    ]);
+  });
+});
+
+describe('project finance', () => {
+  it('total after discount and services, deposit, paid and balance', () => {
+    const items = [mk('table_round_10', 5, 5)]; // 25 € + 10 chairs × 3 € = 55 €
+    const f = projectFinance(
+      items,
+      { discountPercent: 10, depositPercent: 30, extras: [{ label: 'Transport', amount: 50.5 }] },
+      [{ amount: 40 }, { amount: 20 }],
+      DEFAULT_CATALOG,
+    );
+    expect(f).toEqual({ total: 100, deposit: 30, paid: 60, balance: 40, paidShare: 0.6 });
+    expect(projectFinance(items, undefined, [{ amount: 80 }], DEFAULT_CATALOG).balance).toBe(0);
   });
 });

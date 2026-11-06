@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, FileDown, Image } from 'lucide-react';
+import { ChevronDown, FileDown, Image, Orbit } from 'lucide-react';
 import { sq } from '../../i18n/sq';
 import { useEditor } from '../../model/store';
 import { useUi } from '../../model/ui';
 
-type Job = 'pdf' | 'plan' | '3d';
+type Job = 'pdf' | 'plan' | '3d' | '360';
 
 /** "Eksporto PDF" plus PNG downloads for the plan and the 3D view. Export code loads on demand. */
 export function ExportMenu() {
@@ -32,6 +32,7 @@ export function ExportMenu() {
       const { evening, camera } = useUi.getState();
       if (job === 'pdf') await ex.exportPdf(project, evening);
       else if (job === 'plan') await ex.exportPlanPng(project);
+      else if (job === '360') await ex.export360(project, evening, useUi.getState().walk);
       else await ex.export3dPng(project, camera, evening);
     } catch (err) {
       console.error(err);
@@ -93,6 +94,15 @@ export function ExportMenu() {
           >
             <Image size={18} />
             <span>{sq.export.png3d}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="menu-item"
+            onClick={() => void run('360')}
+          >
+            <Orbit size={18} />
+            <span>{sq.export.pano360}</span>
           </button>
         </div>
       )}

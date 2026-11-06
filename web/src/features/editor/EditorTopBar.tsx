@@ -15,6 +15,7 @@ import { history, useEditor, useHistory } from '../../model/store';
 import { useUi, type SaveStatus } from '../../model/ui';
 import { useTheme } from '../../styles/theme';
 import { ExportMenu } from '../export/ExportMenu';
+import { ProjectMenu } from './ProjectMenu';
 import { WarningsBadge } from './WarningsBadge';
 
 function saveText(s: SaveStatus): string {
@@ -39,6 +40,8 @@ export function EditorTopBar({ kind }: { kind: 'project' | 'hall' }) {
   const toggleDrawer = (d: 'catalog' | 'properties') => set({ drawer: drawer === d ? 'none' : d });
   const back = async () => {
     await flushSave();
+    // Someone else saved meanwhile: stay so the conflict dialog can be answered first.
+    if (useUi.getState().save.kind === 'conflict') return;
     navigate(kind === 'hall' ? { name: 'halls' } : { name: 'projects' });
   };
 
@@ -126,6 +129,7 @@ export function EditorTopBar({ kind }: { kind: 'project' | 'hall' }) {
         </button>
       </div>
 
+      {kind === 'project' && <ProjectMenu />}
       {kind === 'project' && <ExportMenu />}
 
       <button
