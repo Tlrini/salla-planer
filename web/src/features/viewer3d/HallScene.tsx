@@ -1,4 +1,5 @@
-import { memo, Suspense, useMemo } from 'react';
+import { memo, Suspense, useEffect, useMemo } from 'react';
+import { useThree } from '@react-three/fiber';
 import {
   baseHeight,
   tableDecorItems,
@@ -14,6 +15,8 @@ import { ChairInstances } from './ChairInstances';
 import { GlbInstances, type PlacedModel } from './GlbInstances';
 import { Hall3D } from './Hall3D';
 import { Lighting } from './Lighting';
+import { usePbr } from './pbrTextures';
+import { setFabricWeave } from './resources';
 import { UplightWashes } from './UplightWashes';
 
 interface ItemMeshProps {
@@ -50,6 +53,13 @@ interface Props {
 /** The whole 3D hall built from the same project data as the 2D plan. */
 export function HallScene({ project, catalog, evening, catalogVersion, waitForModels }: Props) {
   const { hall, items } = project;
+  // Real woven relief for all cloth, once its photo texture has loaded (exports wait for it).
+  const fabric = usePbr('fabric', waitForModels);
+  if (fabric) setFabricWeave(fabric);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (fabric) invalidate();
+  }, [fabric, invalidate]);
 
   // Items with an uploaded .glb are grouped per catalog type and drawn instanced.
   const { procedural, models } = useMemo(() => {
@@ -78,7 +88,7 @@ export function HallScene({ project, catalog, evening, catalogVersion, waitForMo
   return (
     <>
       <Lighting hall={hall} items={items} evening={evening} waitForEnv={waitForModels} />
-      <Hall3D hall={hall} />
+      <Hall3D hall={hall} wait={waitForModels} />
       {procedural.map(({ item, cat, baseY }) => (
         <ItemMesh key={item.id} item={item} cat={cat} hall={hall} evening={evening} baseY={baseY} />
       ))}

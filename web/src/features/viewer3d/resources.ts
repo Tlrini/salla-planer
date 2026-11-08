@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { pleatTexture } from './textures';
+import { tiled, type PbrSet } from './pbrTextures';
 
 /**
  * Shared geometries and materials. Everything here is created once and reused by every
@@ -57,6 +58,7 @@ export function mat(kind: MatKind, color: string, intensity = 1): THREE.MeshStan
         roughness: 0.92,
         metalness: 0,
       });
+      addWeave(m);
       break;
     case 'wood':
       m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0 });
@@ -127,6 +129,8 @@ export function drape(color: string): THREE.MeshStandardMaterial {
   const hit = mats.get(key);
   if (hit) return hit as THREE.MeshStandardMaterial;
   const m = mat('cloth', color).clone();
+  // The folds are a bump map; three.js uses a normal map instead of it, so drop the weave.
+  m.normalMap = null;
   m.bumpMap = pleatTexture();
   m.bumpScale = 14;
   mats.set(key, m);
@@ -144,4 +148,28 @@ export function drapedBox(color: string): THREE.Material[] {
   const side = drape(color);
   const plain = mat('cloth', color);
   return [side, side, plain, plain, side, side];
+}
+
+// ----- fabric weave (photo normal map, loaded later) ------------------------------------
+
+let weave: THREE.Texture | null = null;
+
+function addWeave(m: THREE.MeshStandardMaterial) {
+  if (!weave) return;
+  m.normalMap = weave;
+  m.normalScale.set(0.35, 0.35);
+  m.needsUpdate = true;
+}
+
+/**
+ * Give every cloth material (tablecloth tops, runners, cushions) the real woven relief once the
+ * fabric texture has loaded. Idempotent; pleated skirts keep their folds instead.
+ */
+export function setFabricWeave(set: PbrSet): boolean {
+  if (weave) return false;
+  weave = tiled(set, 1.2, 1.2).normalMap;
+  for (const [key, m] of mats) {
+    if (key.startsWith('cloth|')) addWeave(m as THREE.MeshStandardMaterial);
+  }
+  return true;
 }

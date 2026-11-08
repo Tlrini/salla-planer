@@ -1,0 +1,9 @@
+PBR texture sets from Poly Haven (https://polyhaven.com), licensed CC0 (public domain).
+1k JPG maps: diff = colour, nor = normal (OpenGL), rough = roughness.
+
+herringbone_parquet  3,4 m tile  Jenelle van Heerden, Sergej Majboroda
+marble_01            1,5 m tile  Rob Tuytel
+floor_tiles_06       3,0 m tile  Rob Tuytel
+plastered_wall_04    3,2 m tile  Rob Tuytel
+fabric_pattern_07    0,4 m tile  Rob Tuytel
+velour_velvet        0,28 m tile colormass, Rico Cilliers
