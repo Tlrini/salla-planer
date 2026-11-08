@@ -8,10 +8,12 @@ import {
   LibraryUpdate,
   MAX_LIBRARY_MODEL_BYTES,
   MAX_THUMBNAIL_BYTES,
+  type SessionUser,
 } from '@salla/shared';
 import type { DB } from '../db.js';
 import { getCatalogItem, saveCatalogItem } from './catalog.js';
 import { isGlb, MODELS_URL, removeUploadFile } from './uploads.js';
+import { catalogItemFor } from '../visibility.js';
 
 export const THUMBS_URL = '/uploads/thumbs/';
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -36,12 +38,55 @@ function decodePng(dataUrl: string): Buffer | null {
 }
 
 /**
+ * Store a .glb as a new draft library decor (the agent finishes it in the setup dialog). Used by
+ * the upload from phone scan apps and by in-page scans (Beta 5). `buf` must be a checked GLB.
+ */
+export function createLibraryItem(
+  db: DB,
+  dataDir: string,
+  buf: Buffer,
+  name: string,
+  user: SessionUser,
+): CatalogItem {
+  const modelsDir = path.join(dataDir, 'uploads', 'models');
+  const id = `lib_${nanoid(10)}`;
+  fs.mkdirSync(modelsDir, { recursive: true });
+  const fileName = `${id}-${nanoid(8)}.glb`;
+  fs.writeFileSync(path.join(modelsDir, fileName), buf);
+  const item: CatalogItem = {
+    id,
+    name: name.trim().slice(0, 120) || DEFAULT_NAME,
+    category: 'floral',
+    // Placeholder size until the agent sets the real height in the setup dialog.
+    width: 0.5,
+    depth: 0.5,
+    height: 0.5,
+    shape2d: 'circle',
+    resizable: 'none',
+    defaultColor: '#FFFFFF',
+    price: 0,
+    modelFile: `${MODELS_URL}${fileName}`,
+    active: true,
+    source: 'library',
+    createdBy: user.displayName,
+    createdById: user.id,
+    draft: true,
+    tabletop: false,
+    modelRotation: { x: 0, y: 0, z: 0 },
+    scaleMode: 'uniform',
+  };
+  db.prepare(
+    'INSERT INTO catalog (id, sort, data) VALUES (?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM catalog), ?)',
+  ).run(id, JSON.stringify(item));
+  return item;
+}
+
+/**
  * The agency-wide decor library (Beta 1): agents upload .glb files from phone scan apps; every
  * agent sees and may edit them. Library items are ordinary catalog items (source 'library'), so
  * the editor, 3D view, summary and PDF handle them without special cases.
  */
 export function registerLibraryRoutes(app: FastifyInstance, db: DB, dataDir: string): void {
-  const modelsDir = path.join(dataDir, 'uploads', 'models');
   const thumbsDir = path.join(dataDir, 'uploads', 'thumbs');
   const libraryItem = (id: string) => {
     const item = getCatalogItem(db, id);
@@ -59,37 +104,7 @@ export function registerLibraryRoutes(app: FastifyInstance, db: DB, dataDir: str
     }
     if (file.file.truncated) return reply.code(413).send({ error: 'too_large' });
     if (!isGlb(buf)) return reply.code(400).send({ error: 'not_glb' });
-
-    const id = `lib_${nanoid(10)}`;
-    fs.mkdirSync(modelsDir, { recursive: true });
-    const fileName = `${id}-${nanoid(8)}.glb`;
-    fs.writeFileSync(path.join(modelsDir, fileName), buf);
-    const user = req.user!;
-    const item: CatalogItem = {
-      id,
-      name: nameFromFile(file.filename),
-      category: 'floral',
-      // Placeholder size until the agent sets the real height in the setup dialog.
-      width: 0.5,
-      depth: 0.5,
-      height: 0.5,
-      shape2d: 'circle',
-      resizable: 'none',
-      defaultColor: '#FFFFFF',
-      price: 0,
-      modelFile: `${MODELS_URL}${fileName}`,
-      active: true,
-      source: 'library',
-      createdBy: user.displayName,
-      createdById: user.id,
-      draft: true,
-      tabletop: false,
-      modelRotation: { x: 0, y: 0, z: 0 },
-      scaleMode: 'uniform',
-    };
-    db.prepare(
-      'INSERT INTO catalog (id, sort, data) VALUES (?, (SELECT COALESCE(MAX(sort), 0) + 1 FROM catalog), ?)',
-    ).run(id, JSON.stringify(item));
+    const item = createLibraryItem(db, dataDir, buf, nameFromFile(file.filename), req.user!);
     return reply.code(201).send(item);
   });
 
@@ -99,11 +114,13 @@ export function registerLibraryRoutes(app: FastifyInstance, db: DB, dataDir: str
     const patch = LibraryUpdate.safeParse(req.body);
     if (!patch.success)
       return reply.code(400).send({ error: 'invalid_body', issues: patch.error.issues });
-    const merged = CatalogItem.safeParse({ ...current, ...patch.data, id: current.id });
+    const next: Record<string, unknown> = { ...current, ...patch.data, id: current.id };
+    if (next.stock === null) delete next.stock; // null = no longer tracked
+    const merged = CatalogItem.safeParse(next);
     if (!merged.success)
       return reply.code(400).send({ error: 'invalid_body', issues: merged.error.issues });
     saveCatalogItem(db, merged.data);
-    return merged.data;
+    return catalogItemFor(merged.data, req.user);
   });
 
   app.post<{ Params: { id: string } }>('/api/library/:id/images', async (req, reply) => {
@@ -129,7 +146,7 @@ export function registerLibraryRoutes(app: FastifyInstance, db: DB, dataDir: str
       topView: `${THUMBS_URL}${topName}`,
     };
     saveCatalogItem(db, updated);
-    return updated;
+    return catalogItemFor(updated, req.user);
   });
 
   app.delete<{ Params: { id: string } }>('/api/library/:id', async (req, reply) => {
@@ -140,16 +157,21 @@ export function registerLibraryRoutes(app: FastifyInstance, db: DB, dataDir: str
       return reply.code(403).send({ error: 'forbidden' });
 
     // Ids are random, so any occurrence in a project's JSON is a real use (as an item type or as
-    // a table decor). Used decor is archived so old projects keep rendering and pricing it.
+    // a table decor). Saved versions count too, so restoring one never meets missing decor.
+    // Used decor is archived so old projects keep rendering and pricing it. instr() is a plain
+    // substring test (LIKE would treat the "_" in "lib_…" as a wildcard).
     const used = db
       .prepare(
-        'SELECT 1 FROM projects WHERE items LIKE @q OR hall LIKE @q OR extra LIKE @q LIMIT 1',
+        `SELECT 1 FROM projects WHERE instr(items, @q) > 0 OR instr(hall, @q) > 0 OR instr(extra, @q) > 0
+         UNION ALL
+         SELECT 1 FROM project_versions WHERE instr(data, @q) > 0
+         LIMIT 1`,
       )
-      .get({ q: `%"${current.id}"%` });
+      .get({ q: `"${current.id}"` });
     if (used) {
       const archived = { ...current, active: false };
       saveCatalogItem(db, archived);
-      return { archived: true, item: archived };
+      return { archived: true, item: catalogItemFor(archived, user) };
     }
     db.prepare('DELETE FROM catalog WHERE id = ?').run(current.id);
     removeUploadFile(dataDir, current.modelFile);

@@ -24,7 +24,14 @@ export interface AppConfig {
   trustProxy?: false | string;
   adminUser?: string;
   adminPassword?: string;
+  /**
+   * Shared secret of the GPU scan worker (Beta 5). Unset or shorter than
+   * MIN_WORKER_TOKEN_LENGTH = in-page scanning is off.
+   */
+  scanWorkerToken?: string;
 }
+
+export const MIN_WORKER_TOKEN_LENGTH = 32;
 
 /**
  * TRUST_PROXY env: unset/"false" -> false, "172.28.0.10" or "10.0.0.0/8,127.0.0.1" -> that list.
@@ -59,5 +66,6 @@ export function configFromEnv(env = process.env): AppConfig {
     trustProxy: parseTrustProxy(env.TRUST_PROXY),
     adminUser: env.ADMIN_USER,
     adminPassword: env.ADMIN_PASSWORD,
+    scanWorkerToken: env.SCAN_WORKER_TOKEN?.trim() || undefined,
   };
 }

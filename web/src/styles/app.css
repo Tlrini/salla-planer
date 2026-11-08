@@ -2156,41 +2156,10 @@ button:disabled {
   }
 }
 
-/* ---------- payments ---------- */
-.dialog-wide:has(.payments) {
-  width: min(820px, calc(100vw - 24px));
-}
-
-.payments {
+/* ---------- contract ---------- */
+.contract-dialog {
   display: grid;
   gap: 12px;
-}
-
-.payments h3 {
-  font-size: 14px;
-  margin: 4px 0 0;
-}
-
-.stat-value.ok {
-  color: #4f7a3a;
-}
-
-.payment-add {
-  display: grid;
-  grid-template-columns: auto minmax(110px, 160px) auto minmax(0, 1fr) auto;
-  gap: 6px;
-  align-items: end;
-}
-
-.payment-add > input,
-.payment-add > select {
-  min-height: var(--touch);
-  padding: 0 10px;
-  font: inherit;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
 }
 
 .pill-ok {
@@ -2201,12 +2170,6 @@ button:disabled {
   display: grid;
   gap: 12px;
   max-width: 820px;
-}
-
-@media (max-width: 700px) {
-  .payment-add {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 /* ---------- history ---------- */
@@ -2606,4 +2569,261 @@ a.icon-btn {
   gap: 6px;
   align-items: center;
   min-width: 0;
+}
+
+/* ---------- client notices (bell) ---------- */
+.notice-bell {
+  position: relative;
+}
+
+.notice-bell .icon-btn {
+  position: relative;
+}
+
+.notice-bell .has-notices {
+  color: var(--accent-strong);
+}
+
+.notice-count {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.notice-list {
+  min-width: 300px;
+  max-width: min(420px, calc(100vw - 24px));
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.notice-list strong {
+  padding: 4px 12px;
+}
+
+.notice-item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  color: inherit;
+  font: inherit;
+}
+
+.notice-project {
+  font-weight: 600;
+}
+
+/* ---------- server off ---------- */
+.offline-page {
+  max-width: 520px;
+  margin: 12vh auto 0;
+  padding: 24px 16px;
+  display: grid;
+  gap: 14px;
+  text-align: center;
+  justify-items: center;
+}
+
+/* ---------- edit in 3D ---------- */
+.edit3d-bar {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: calc(var(--radius) + 4px);
+  box-shadow: var(--shadow);
+}
+
+.edit3d-bar > .small {
+  padding: 0 8px;
+}
+
+/* ---------- in-page scanning (Beta 5) ---------- */
+.scan-page {
+  max-width: 720px;
+  display: grid;
+  gap: 14px;
+}
+
+.scan-tips {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.scan-tips h2 {
+  font-size: 16px;
+  margin: 0 0 6px;
+}
+
+.scan-tips ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scan-camera {
+  display: grid;
+  gap: 10px;
+}
+
+.scan-camera,
+.scan-video {
+  position: relative;
+}
+
+.scan-video {
+  width: 100%;
+  max-height: 70dvh;
+  border-radius: calc(var(--radius) + 2px);
+  background: #000;
+  object-fit: contain;
+}
+
+.scan-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  pointer-events: none;
+}
+
+.scan-rec,
+.scan-hint {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.6);
+  color: #fff;
+}
+
+.scan-hint {
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.scan-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e5484d;
+  vertical-align: 0;
+}
+
+.scan-progress {
+  width: 100%;
+  height: 10px;
+  accent-color: var(--accent);
+}
+
+.scan-uploading {
+  display: grid;
+  gap: 6px;
+}
+
+.scan-jobs {
+  margin: 0 0 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.scan-jobs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.scan-jobs-head h2 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.scan-job-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.scan-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scan-job-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.scan-job-actions {
+  display: flex;
+  gap: 6px;
+}
+
+@media (max-width: 560px) {
+  .scan-job {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .scan-job-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+.crop-axis {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px 8px;
+  margin: 0;
+}
+
+.crop-range {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--touch);
+}
+
+.crop-range input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
 }

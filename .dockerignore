@@ -9,3 +9,5 @@ playwright-report
 test-results
 *.tsbuildinfo
 .env
+# The GPU scan worker has its own image (worker/Dockerfile), built on the GPU VM.
+worker

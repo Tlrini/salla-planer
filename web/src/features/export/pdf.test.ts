@@ -152,10 +152,8 @@ describe('more PDFs (contract, loading sheet, seating)', () => {
       ...wedding(),
       pricing: {
         discountPercent: 10,
-        depositPercent: 30,
         extras: [{ id: 'e', label: 'Transport', amount: 150 }],
       },
-      payments: [{ id: 'p', date: '2027-01-10', amount: 500, method: 'bank' as const }],
       checklist: {
         lines: { table_round_10: { loaded: true } },
         tasks: [{ id: 't', text: 'Çelësat', done: false }],
@@ -166,7 +164,7 @@ describe('more PDFs (contract, loading sheet, seating)', () => {
     const contract = buildContractPdf(
       project,
       DEFAULT_CATALOG,
-      { name: 'Dekor Ëndrra', nipt: 'L12345678A', iban: 'AL47 2121 1009 0000 0002 3569 8741' },
+      { name: 'Dekor Ëndrra', nipt: 'L12345678A' },
       await fontsP,
       new Date('2026-11-06T10:00:00Z'),
     );

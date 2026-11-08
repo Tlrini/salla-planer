@@ -16,7 +16,7 @@ export function isGlb(buf: Buffer): boolean {
 
 /** Delete a file we stored under data/uploads/<folder>/ given its public URL. Ignores anything else. */
 export function removeUploadFile(dataDir: string, url: string | undefined): void {
-  const m = url ? /^\/uploads\/(models|thumbs|images)\/([\w.-]+)$/.exec(url) : null;
+  const m = url ? /^\/uploads\/(models|thumbs|images|scans)\/([\w.-]+)$/.exec(url) : null;
   if (!m) return;
   fs.rmSync(path.join(dataDir, 'uploads', m[1]!, path.basename(m[2]!)), { force: true });
 }

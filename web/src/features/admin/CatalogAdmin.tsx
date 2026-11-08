@@ -21,6 +21,7 @@ function Row({ item }: { item: CatalogItem }) {
   const [h, setH] = useState(show(item.height));
   const [price, setPrice] = useState(show(item.price));
   const [stock, setStock] = useState(item.stock === undefined ? '' : String(item.stock));
+  const [cost, setCost] = useState(item.cost === undefined ? '' : show(item.cost));
   const [active, setActive] = useState(item.active);
   const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -31,10 +32,21 @@ function Row({ item }: { item: CatalogItem }) {
     const nh = parseNum(h);
     const np = parseNum(price);
     if (nw === null || nd === null || nh === null || np === null || !name.trim()) return null;
-    // Empty stock = not tracked.
-    const ns = stock.trim() === '' ? undefined : Math.round(parseNum(stock) ?? -1);
-    if (ns !== undefined && ns < 0) return null;
-    return { name: name.trim(), width: nw, depth: nd, height: nh, price: np, active, stock: ns };
+    // Empty stock = not tracked; empty cost = none. null clears them on the server.
+    const ns = stock.trim() === '' ? null : Math.round(parseNum(stock) ?? -1);
+    if (ns !== null && ns < 0) return null;
+    const nc = cost.trim() === '' ? null : parseNum(cost);
+    if (cost.trim() !== '' && nc === null) return null;
+    return {
+      name: name.trim(),
+      width: nw,
+      depth: nd,
+      height: nh,
+      price: np,
+      active,
+      stock: ns,
+      cost: nc,
+    };
   })();
   const dirty =
     patch !== null &&
@@ -43,7 +55,8 @@ function Row({ item }: { item: CatalogItem }) {
       patch.depth !== item.depth ||
       patch.height !== item.height ||
       patch.price !== item.price ||
-      patch.stock !== item.stock ||
+      (patch.stock ?? undefined) !== item.stock ||
+      (patch.cost ?? undefined) !== item.cost ||
       patch.active !== item.active);
 
   const save = async () => {
@@ -131,6 +144,16 @@ function Row({ item }: { item: CatalogItem }) {
       </td>
       <td>
         <input
+          aria-label={`${sq.admin.cost}: ${item.name}`}
+          className="mono price-input"
+          inputMode="decimal"
+          placeholder="—"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+        />
+      </td>
+      <td>
+        <input
           type="checkbox"
           aria-label={sq.admin.active}
           checked={active}
@@ -197,6 +220,7 @@ export function CatalogAdmin() {
             <th>{sq.admin.size}</th>
             <th>{sq.admin.price}</th>
             <th title={sq.admin.stockHint}>{sq.admin.stock}</th>
+            <th title={sq.admin.costHint}>{sq.admin.cost}</th>
             <th>{sq.admin.active}</th>
             <th>{sq.admin.model}</th>
             <th aria-hidden />

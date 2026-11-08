@@ -21,6 +21,8 @@ interface UiState {
   camera: CameraPreset;
   /** Eye-level "Street View" walking instead of orbiting (Beta 3). */
   walk: boolean;
+  /** "Rregullo në 3D": select and drag items in the 3D view (not while walking). */
+  edit3d: boolean;
   /** Two-point scale calibration of the floor-plan photo is running on the 2D plan. */
   calibrating: boolean;
   /** Annotation tool on the 2D plan (measure / text / zone), or none. */
@@ -45,6 +47,7 @@ export const useUi = create<UiState>()((set) => ({
   evening: false,
   camera: 'perspective',
   walk: false,
+  edit3d: false,
   calibrating: false,
   annotateTool: null,
   present: false,

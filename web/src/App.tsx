@@ -5,6 +5,7 @@ import { parseRoute, useHash } from './model/router';
 import { useSession } from './model/session';
 import { AdminPage } from './features/admin/AdminPage';
 import { LoginPage } from './features/auth/LoginPage';
+import { OfflinePage } from './features/auth/OfflinePage';
 import { HallsPage } from './features/halls/HallsPage';
 import { HallEditorPage, ProjectEditorPage } from './features/projects/ProjectEditorPage';
 import { ProjectsPage } from './features/projects/ProjectsPage';
@@ -12,6 +13,10 @@ import { ProjectsPage } from './features/projects/ProjectsPage';
 // The library page carries the 3D model preview (three.js): load it only when opened.
 const LibraryPage = lazy(() =>
   import('./features/library/LibraryPage').then((m) => ({ default: m.LibraryPage })),
+);
+
+const ScanPage = lazy(() =>
+  import('./features/scan/ScanPage').then((m) => ({ default: m.ScanPage })),
 );
 
 const SharePage = lazy(() =>
@@ -40,6 +45,7 @@ export function App() {
       </Suspense>
     );
   if (status === 'loading') return <main className="center-message">{sq.errors.loading}</main>;
+  if (status === 'offline') return <OfflinePage />;
   if (status === 'anon') return <LoginPage />;
 
   switch (route.name) {
@@ -65,6 +71,13 @@ export function App() {
       return (
         <Suspense fallback={<main className="center-message">{sq.errors.loading}</main>}>
           <LibraryPage />
+        </Suspense>
+      );
+    case 'scan':
+    case 'scanHall':
+      return (
+        <Suspense fallback={<main className="center-message">{sq.errors.loading}</main>}>
+          <ScanPage key={route.name} purpose={route.name === 'scanHall' ? 'hall' : 'decor'} />
         </Suspense>
       );
     case 'admin':

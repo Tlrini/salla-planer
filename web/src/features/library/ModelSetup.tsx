@@ -158,7 +158,8 @@ function SetupForm({ item, onClose }: { item: CatalogItem; onClose: () => void }
         width: size.width,
         depth: size.depth,
         price,
-        stock,
+        // An emptied field must reach the server as "clear", not be dropped.
+        stock: stock ?? null,
         tabletop,
         shape2d: shape,
         modelRotation: rotation,

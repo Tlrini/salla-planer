@@ -8,9 +8,12 @@ import {
   Eye,
   Footprints,
   Moon,
+  Move,
   Orbit,
   Presentation,
   Rotate3d,
+  RotateCcw,
+  RotateCw,
   Sparkles,
   Square,
   Sun,
@@ -23,6 +26,8 @@ import { catalogMap, useCatalogVersion, useEditor } from '../../model/store';
 import { useUi, type CameraPreset } from '../../model/ui';
 import { useDebounced } from '../../model/useDebounced';
 import { CameraRig } from './CameraRig';
+import { useDrag3d } from './drag3d';
+import { Edit3DControls } from './Edit3D';
 import { Effects } from './Effects';
 import { autoViewpoints, CAMERA_FOV, type Pose } from './cameras';
 import { HallScene } from './HallScene';
@@ -42,7 +47,16 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
   const liveHall = useEditor((s) => s.project.hall);
   const liveItems = useEditor((s) => s.project.items);
   const hall = useDebounced(liveHall, 150);
-  const items = useDebounced(liveItems, 150);
+  const debouncedItems = useDebounced(liveItems, 150);
+  // Items being dragged in the 3D view are drawn at their drag position right away.
+  const preview = useDrag3d((s) => s.preview);
+  const items = useMemo(
+    () =>
+      preview
+        ? debouncedItems.map((i) => (preview[i.id] ? { ...i, ...preview[i.id] } : i))
+        : debouncedItems,
+    [debouncedItems, preview],
+  );
   const viewpoints = useEditor((s) => s.project.viewpoints);
   const kind = useEditor((s) => s.meta?.kind ?? 'project');
   // Hall templates: the edited items are the hall's structure.
@@ -50,6 +64,8 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
     () => (kind === 'hall' ? { hall: { ...hall, structure: items }, items: [] } : { hall, items }),
     [kind, hall, items],
   );
+  const edit3d = useUi((s) => s.edit3d) && !readOnly;
+  const selectionCount = useEditor((s) => s.selection.length);
   const catalogVersion = useCatalogVersion();
   const evening = useUi((s) => s.evening);
   const camera = useUi((s) => s.camera);
@@ -213,9 +229,54 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
               enableDamping={false}
             />
             <CameraRig preset={camera} hall={hall} items={items} nonce={nonce} />
+            {edit3d && <Edit3DControls hall={hall} items={items} catalog={catalogMap} />}
           </>
         )}
       </Canvas>
+      {edit3d && !walk && (
+        <div className="edit3d-bar" role="toolbar" aria-label={sq.viewer.edit3dTitle}>
+          {selectionCount > 0 ? (
+            <>
+              <span className="small">{sq.viewer.selected(selectionCount)}</span>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={sq.viewer.rotateLeft}
+                title={sq.viewer.rotateLeft}
+                onClick={() => {
+                  const s = useEditor.getState();
+                  s.rotateItems(s.selection, -15);
+                }}
+              >
+                <RotateCcw size={18} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={sq.viewer.rotateRight}
+                title={sq.viewer.rotateRight}
+                onClick={() => {
+                  const s = useEditor.getState();
+                  s.rotateItems(s.selection, 15);
+                }}
+              >
+                <RotateCw size={18} />
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={sq.viewer.deselect}
+                title={sq.viewer.deselect}
+                onClick={() => useEditor.getState().setSelection([])}
+              >
+                <X size={18} />
+              </button>
+            </>
+          ) : (
+            <span className="small">{sq.viewer.edit3dHint}</span>
+          )}
+        </div>
+      )}
       <div className={`walk-fade${fading ? ' on' : ''}`} aria-hidden />
 
       <div className="viewer-controls" role="toolbar">
@@ -270,6 +331,18 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
                   <span>{label}</span>
                 </button>
               ))}
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="text-btn"
+                  aria-pressed={edit3d}
+                  title={sq.viewer.edit3dTitle}
+                  onClick={() => set({ edit3d: !edit3d })}
+                >
+                  <Move size={18} />
+                  <span>{sq.viewer.edit3d}</span>
+                </button>
+              )}
               {kind === 'project' && (
                 <button type="button" className="text-btn walk-btn" onClick={startWalk}>
                   <Footprints size={18} />

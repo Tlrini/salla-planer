@@ -1,9 +1,9 @@
 import { jsPDF } from 'jspdf';
 import {
+  chosenItems,
   formatDate,
   formatEUR,
   formatMeters,
-  projectFinance,
   quoteTotals,
   summarize,
   type AgencySettings,
@@ -30,7 +30,7 @@ export function contractNumber(project: Project, today = new Date()): string {
 
 /**
  * Service contract for the event decoration (A4 portrait): parties, object, price with discount
- * and services, deposit and payments, terms and signatures.
+ * and services, terms and signatures. (Payments are handled outside the app.)
  */
 export function buildContractPdf(
   project: Project,
@@ -121,7 +121,9 @@ export function buildContractPdf(
   );
 
   heading(sq.contract.article(2, sq.contract.price));
-  const summary = summarize(project.items, catalog);
+  // The contract is for the option the client chose, even if another one is open in the editor.
+  const signed = chosenItems(project);
+  const summary = summarize(signed, catalog);
   for (const l of summary.lines.filter((x) => x.total > 0)) {
     row(`${l.quantity} × ${l.name}`, formatEUR(l.total));
   }
@@ -133,21 +135,7 @@ export function buildContractPdf(
   for (const e of q.extras) row(e.label || sq.quote.extraPlaceholder, formatEUR(e.amount));
   row(sq.quote.total, formatEUR(q.total), true);
 
-  heading(sq.contract.article(3, sq.contract.payment));
-  const f = projectFinance(project.items, project.pricing, project.payments, catalog);
-  if (f.deposit > 0)
-    para(sq.contract.depositText(project.pricing?.depositPercent ?? 0, formatEUR(f.deposit)));
-  para(sq.contract.balanceText);
-  if (agency.iban)
-    para(`${sq.contract.bankAccount}: ${[agency.bank, agency.iban].filter(Boolean).join(' · ')}`);
-  for (const p of project.payments ?? [])
-    row(`${formatDate(p.date)} · ${sq.payments.methods[p.method]}`, formatEUR(p.amount));
-  if (project.payments?.length) {
-    row(sq.payments.paid, formatEUR(f.paid), true);
-    row(sq.payments.balance, formatEUR(f.balance), true);
-  }
-
-  heading(sq.contract.article(4, sq.contract.terms));
+  heading(sq.contract.article(3, sq.contract.terms));
   const terms = agency.contractTerms?.trim() ? agency.contractTerms : sq.contract.defaultTerms;
   terms
     .split('\n')

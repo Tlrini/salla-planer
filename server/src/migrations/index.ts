@@ -127,4 +127,51 @@ export const MIGRATIONS: ReadonlyArray<{ id: number; name: string; sql: string }
       CREATE INDEX share_comments_token ON share_comments(token, created_at);
     `,
   },
+  {
+    id: 7,
+    name: 'scan_jobs',
+    // In-page scanning (Beta 5): the queue the GPU worker takes jobs from. Input files live in
+    // data/scans/<id>/, the worker's result in data/uploads/scans/.
+    sql: `
+      CREATE TABLE scan_jobs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        source TEXT NOT NULL CHECK (source IN ('video', 'photos')),
+        file_count INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'ready', 'failed', 'done')),
+        progress INTEGER NOT NULL DEFAULT 0,
+        stage TEXT,
+        error TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        lease TEXT,
+        heartbeat_at INTEGER,
+        result_file TEXT,
+        library_id TEXT,
+        created_by TEXT NOT NULL,
+        created_by_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX scan_jobs_status ON scan_jobs(status, created_at);
+    `,
+  },
+  {
+    id: 8,
+    name: 'scan_jobs_purpose',
+    // A scan is either a decoration (-> library) or a whole empty hall (-> hall template).
+    sql: `
+      ALTER TABLE scan_jobs ADD COLUMN purpose TEXT NOT NULL DEFAULT 'decor';
+      ALTER TABLE scan_jobs ADD COLUMN hall_id TEXT;
+    `,
+  },
+  {
+    id: 9,
+    name: 'project_bin',
+    // Deleted projects wait in the bin ("Koshi") for 30 days before they are removed for good.
+    sql: `
+      ALTER TABLE projects ADD COLUMN deleted_at TEXT;
+      ALTER TABLE projects ADD COLUMN deleted_by TEXT;
+      CREATE INDEX projects_deleted ON projects(deleted_at);
+    `,
+  },
 ];

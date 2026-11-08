@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { CatalogItem, CatalogUpdate } from '@salla/shared';
 import { requireAdmin } from '../auth.js';
 import type { DB } from '../db.js';
+import { catalogItemFor } from '../visibility.js';
 
 export function readCatalog(db: DB): CatalogItem[] {
   const rows = db.prepare('SELECT data FROM catalog ORDER BY sort, id').all() as Array<{
@@ -21,7 +22,8 @@ export function saveCatalogItem(db: DB, item: CatalogItem): void {
 }
 
 export function registerCatalogRoutes(app: FastifyInstance, db: DB): void {
-  app.get('/api/catalog', async () => readCatalog(db));
+  // What a piece costs the agency is for admins only.
+  app.get('/api/catalog', async (req) => readCatalog(db).map((c) => catalogItemFor(c, req.user)));
 
   app.put<{ Params: { id: string } }>(
     '/api/catalog/:id',
@@ -32,7 +34,10 @@ export function registerCatalogRoutes(app: FastifyInstance, db: DB): void {
       const patch = CatalogUpdate.safeParse(req.body);
       if (!patch.success)
         return reply.code(400).send({ error: 'invalid_body', issues: patch.error.issues });
-      const merged = CatalogItem.safeParse({ ...current, ...patch.data, id: current.id });
+      const next: Record<string, unknown> = { ...current, ...patch.data, id: current.id };
+      // null = clear the value (JSON cannot send "undefined").
+      for (const key of ['stock', 'cost'] as const) if (next[key] === null) delete next[key];
+      const merged = CatalogItem.safeParse(next);
       if (!merged.success)
         return reply.code(400).send({ error: 'invalid_body', issues: merged.error.issues });
       saveCatalogItem(db, merged.data);

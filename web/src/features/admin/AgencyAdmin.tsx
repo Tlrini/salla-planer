@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Check } from 'lucide-react';
 import type { AgencySettings } from '@salla/shared';
 import { api } from '../../api/client';
+import { rememberStartLink } from '../../model/offline';
 import { sq } from '../../i18n/sq';
 import { TextField } from '../editor/fields';
 
-type Field = Exclude<keyof AgencySettings, 'contractTerms'>;
-const FIELDS: Field[] = ['name', 'address', 'city', 'phone', 'email', 'nipt', 'bank', 'iban'];
+type Field = Exclude<keyof AgencySettings, 'contractTerms' | 'startLink'>;
+const FIELDS: Field[] = ['name', 'address', 'city', 'phone', 'email', 'nipt'];
 
 /** Admin: agency details for contracts and PDF headers. */
 export function AgencyAdmin() {
@@ -29,7 +30,9 @@ export function AgencyAdmin() {
   const save = async () => {
     setState('saving');
     try {
-      setAgency(await api.put<AgencySettings>('/api/settings/agency', agency));
+      const saved = await api.put<AgencySettings>('/api/settings/agency', agency);
+      setAgency(saved);
+      rememberStartLink(saved.startLink);
       setState('saved');
     } catch {
       setState('error');
@@ -63,6 +66,14 @@ export function AgencyAdmin() {
         live
         onCommit={(v) => set({ contractTerms: v })}
       />
+      <TextField
+        label={sq.agency.startLink}
+        value={agency.startLink ?? ''}
+        placeholder="https://…lambda-url.eu-central-1.on.aws/?key=…"
+        live
+        onCommit={(v) => set({ startLink: v.trim() })}
+      />
+      <p className="muted small">{sq.agency.startLinkHint}</p>
       {state === 'error' && <p className="form-error">{sq.errors.generic}</p>}
       <div className="dialog-actions">
         <button type="submit" className="btn btn-primary" disabled={state === 'saving'}>

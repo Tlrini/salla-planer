@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { E2E_ADMIN } from '../playwright.config';
 
-test('guests, checklist, payments, share link, calendar, dashboard', async ({ page, browser }) => {
+test('guests, checklist, contract, share link, calendar, dashboard', async ({ page, browser }) => {
   await page.goto('/');
   await page.getByLabel('Përdoruesi').fill(E2E_ADMIN.user);
   await page.getByLabel('Fjalëkalimi').fill(E2E_ADMIN.password);
@@ -47,12 +47,9 @@ test('guests, checklist, payments, share link, calendar, dashboard', async ({ pa
   await expect(page.locator('.progress-item').first()).not.toContainText('· 0%');
   await page.locator('dialog[open] .dialog-actions').getByRole('button', { name: 'Mbyll' }).click();
 
-  // Payments: record a deposit.
-  await openTool('Pagesat dhe kontrata');
-  await page.getByLabel('Shuma', { exact: true }).fill('20');
-  await page.getByLabel('Shuma', { exact: true }).press('Tab');
-  await page.getByRole('button', { name: 'Shto pagesë' }).click();
-  await expect(page.locator('.payments-stats')).toContainText('20,00 €');
+  // Contract: shows the quote total (2 tables + 20 chairs = 110 €); no payments in the app.
+  await openTool('Kontrata');
+  await expect(page.locator('.contract-dialog')).toContainText('110,00 €');
   await page.locator('dialog[open] .dialog-actions').getByRole('button', { name: 'Mbyll' }).click();
   await expect(page.locator('.save-status')).toContainText('U ruajt', { timeout: 10_000 });
 
@@ -80,13 +77,13 @@ test('guests, checklist, payments, share link, calendar, dashboard', async ({ pa
   await expect(page.locator('.comment')).toContainText('Faleminderit!');
   await page.locator('dialog[open] .dialog-actions').getByRole('button', { name: 'Mbyll' }).click();
 
-  // Calendar shows the event; dashboard shows the payment.
+  // Calendar shows the event; the dashboard counts it as an open offer.
   await page.locator('.topbar').getByRole('button', { name: 'Kthehu' }).click();
   await page.getByRole('button', { name: 'Kalendari' }).click();
   await expect(page.locator('.calendar-event')).toContainText('Drita');
   await page.getByRole('button', { name: 'Paneli' }).click();
-  // A draft counts as an open offer (2 tables + 20 chairs = 110 €); its payment shows by month.
+  // A draft counts as an open offer (2 tables + 20 chairs = 110 €), also in the month table.
   await expect(page.locator('.kpi-row')).toContainText('110,00 €');
   await page.getByRole('button', { name: 'Shfaq tabelën' }).click();
-  await expect(page.locator('.dashboard .summary-table')).toContainText('20,00 €');
+  await expect(page.locator('.dashboard .summary-table')).toContainText('110,00 €');
 });

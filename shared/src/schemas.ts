@@ -66,8 +66,6 @@ export type Viewpoint = z.infer<typeof Viewpoint>;
 export const Pricing = z.object({
   /** Discount on the decor total, in percent (0–100). */
   discountPercent: z.number().min(0).max(100).optional(),
-  /** Deposit asked when signing, in percent of the quote total (contract). */
-  depositPercent: z.number().min(0).max(100).optional(),
   /** Extra services, e.g. "Transport dhe montim". */
   extras: z
     .array(
@@ -81,6 +79,14 @@ export const Pricing = z.object({
     .optional(),
 });
 export type Pricing = z.infer<typeof Pricing>;
+
+/** What an event costs the agency besides its own decor (transport, staff, fresh flowers…). */
+export const ProjectCost = z.object({
+  id: z.string().min(1).max(32),
+  label: z.string().trim().max(120),
+  amount: z.number().finite().min(0).max(1_000_000),
+});
+export type ProjectCost = z.infer<typeof ProjectCost>;
 
 const shortId = z.string().min(1).max(32);
 
@@ -119,18 +125,6 @@ export const Checklist = z.object({
     .optional(),
 });
 export type Checklist = z.infer<typeof Checklist>;
-
-export const PaymentMethod = z.enum(['cash', 'bank', 'card']);
-export type PaymentMethod = z.infer<typeof PaymentMethod>;
-
-export const Payment = z.object({
-  id: shortId,
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  amount: z.number().finite().positive().max(10_000_000),
-  method: PaymentMethod,
-  note: z.string().max(200).optional(),
-});
-export type Payment = z.infer<typeof Payment>;
 
 const coord = z.number().finite().min(-1000).max(1000);
 
@@ -212,8 +206,8 @@ export const Project = z.object({
   guests: z.array(Guest).max(3000).optional(),
   /** Team checklist for loading, installing and returning the decor. */
   checklist: Checklist.optional(),
-  /** Payments received from the client. */
-  payments: z.array(Payment).max(200).optional(),
+  /** The agency's own costs for this event (admins only; for the profit). */
+  costs: z.array(ProjectCost).max(30).optional(),
   /** Measurements, texts and zones drawn on the plan. */
   annotations: z.array(Annotation).max(300).optional(),
   notes: z.string().max(5000).optional(),
@@ -248,6 +242,11 @@ export const CatalogItem = z.object({
   defaultColor: hexColor,
   defaultColor2: hexColor.optional(),
   price: z.number().nonnegative(),
+  /**
+   * What one piece costs the agency per event (rental, flowers, wear); absent = 0. Only admins
+   * see it: the server leaves it out of the catalog for agents.
+   */
+  cost: z.number().nonnegative().max(1_000_000).optional(),
   /** Pieces the agency owns; absent = not tracked. Used for availability on event dates. */
   stock: z.number().int().nonnegative().optional(),
   modelFile: z.string().optional(),

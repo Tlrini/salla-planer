@@ -21,6 +21,16 @@ const toTemplate = (r: HallRow): HallTemplate => ({
   ...(r.updated_by ? { updatedBy: r.updated_by } : {}),
 });
 
+/** Store a new (non-example) hall template; used by "Salla e re" and by hall scans. */
+export function createHallTemplate(db: DB, hall: Hall, who: string): HallTemplate {
+  const now = new Date().toISOString();
+  const id = nanoid();
+  db.prepare(
+    'INSERT INTO halls (id, example, hall, created_at, updated_at, version, updated_by) VALUES (?, 0, ?, ?, ?, 1, ?)',
+  ).run(id, JSON.stringify(hall), now, now, who);
+  return toTemplate(db.prepare(`SELECT ${COLUMNS} FROM halls WHERE id = ?`).get(id) as HallRow);
+}
+
 export function registerHallRoutes(app: FastifyInstance, db: DB): void {
   const getRow = (id: string) =>
     db.prepare(`SELECT ${COLUMNS} FROM halls WHERE id = ?`).get(id) as HallRow | undefined;
@@ -42,12 +52,7 @@ export function registerHallRoutes(app: FastifyInstance, db: DB): void {
     const body = HallInput.safeParse(req.body);
     if (!body.success)
       return reply.code(400).send({ error: 'invalid_body', issues: body.error.issues });
-    const now = new Date().toISOString();
-    const id = nanoid();
-    db.prepare(
-      'INSERT INTO halls (id, example, hall, created_at, updated_at, version, updated_by) VALUES (?, 0, ?, ?, ?, 1, ?)',
-    ).run(id, JSON.stringify(body.data.hall), now, now, req.user!.displayName);
-    return reply.code(201).send(toTemplate(getRow(id)!));
+    return reply.code(201).send(createHallTemplate(db, body.data.hall, req.user!.displayName));
   });
 
   app.put<{ Params: { id: string } }>('/api/halls/:id', async (req, reply) => {

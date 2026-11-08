@@ -122,10 +122,16 @@ export interface Box {
 export function halfExtents(item: Item, cat?: CatalogItem): { hx: number; hy: number } {
   const hw = item.width / 2;
   const hd = item.depth / 2;
-  if (cat?.shape2d === 'circle') return { hx: hw, hy: hd };
+  if (cat?.shape2d === 'circle' && Math.abs(hw - hd) < 1e-9) return { hx: hw, hy: hd };
   const r = (item.rotation * Math.PI) / 180;
   const c = Math.abs(Math.cos(r));
   const s = Math.abs(Math.sin(r));
+  // An oval (round decor scanned wider than deep) turns like an ellipse, not like a rectangle.
+  if (cat?.shape2d === 'circle')
+    return {
+      hx: round6(Math.hypot(hw * c, hd * s)),
+      hy: round6(Math.hypot(hw * s, hd * c)),
+    };
   return { hx: round6(hw * c + hd * s), hy: round6(hw * s + hd * c) };
 }
 
@@ -742,40 +748,61 @@ export function shortages(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Money: quote total, deposit, payments
+// Money: quote total and profit (payments are not handled in the app)
 
-export interface Finance {
-  /** Final quote total (decor − discount + services). */
-  total: number;
-  /** Deposit asked at signing (pricing.depositPercent of the total). */
-  deposit: number;
-  paid: number;
-  /** What the client still owes (never negative). */
-  balance: number;
-  /** Paid share of the total, 0–1. */
-  paidShare: number;
+type QuotePricing =
+  { discountPercent?: number; extras?: Array<{ label: string; amount: number }> } | undefined;
+
+/** Final quote total of a layout: decor − discount + extra services. Pure. */
+export function projectTotal(
+  items: readonly Item[],
+  pricing: QuotePricing,
+  catalog: readonly CatalogItem[],
+): number {
+  return quoteTotals(summarize(items, catalog).total, pricing).total;
 }
 
-export function projectFinance(
+export interface Profit {
+  /** What the client pays (the quote total after discount and services). */
+  revenue: number;
+  /** Agency cost of the decor: quantity × CatalogItem.cost, chairs and table decor included. */
+  decorCost: number;
+  /** Other costs of the event (Project.costs: transport, staff…). */
+  otherCost: number;
+  profit: number;
+  /** Profit share of the revenue, 0–1 (0 when there is no revenue). */
+  margin: number;
+}
+
+/** Profit of an event for the agency (admins only). Pure. */
+export function projectProfit(
   items: readonly Item[],
-  pricing:
-    | {
-        discountPercent?: number;
-        depositPercent?: number;
-        extras?: Array<{ label: string; amount: number }>;
-      }
-    | undefined,
-  payments: ReadonlyArray<{ amount: number }> | undefined,
+  pricing: QuotePricing,
+  costs: ReadonlyArray<{ amount: number }> | undefined,
   catalog: readonly CatalogItem[],
-): Finance {
-  const total = quoteTotals(summarize(items, catalog).total, pricing).total;
-  const paid = cents((payments ?? []).reduce((s, p) => s + p.amount, 0));
-  const deposit = cents((total * (pricing?.depositPercent ?? 0)) / 100);
-  return {
-    total,
-    deposit,
-    paid,
-    balance: Math.max(0, cents(total - paid)),
-    paidShare: total > 0 ? Math.min(1, paid / total) : paid > 0 ? 1 : 0,
-  };
+): Profit {
+  const summary = summarize(items, catalog);
+  const revenue = quoteTotals(summary.total, pricing).total;
+  const byId = new Map(catalog.map((c) => [c.id, c]));
+  const decorCost = cents(
+    summary.lines.reduce((s, l) => s + l.quantity * (byId.get(l.type)?.cost ?? 0), 0),
+  );
+  const otherCost = cents((costs ?? []).reduce((s, c) => s + c.amount, 0));
+  const profit = cents(revenue - decorCost - otherCost);
+  return { revenue, decorCost, otherCost, profit, margin: revenue > 0 ? profit / revenue : 0 };
+}
+
+/**
+ * The design that counts for money and stock: the option the client chose as final
+ * ("Zgjidh si përfundimtar"), or the open (active) option when none is chosen yet.
+ */
+export function chosenItems(p: {
+  items: readonly Item[];
+  option?: { id: string } | undefined;
+  otherOptions?: ReadonlyArray<{ id: string; items: readonly Item[] }> | undefined;
+  finalOptionId?: string | undefined;
+}): readonly Item[] {
+  // A project with one option has the implicit id 'A' (see activeOption in the web store).
+  if (!p.finalOptionId || p.finalOptionId === (p.option?.id ?? 'A')) return p.items;
+  return p.otherOptions?.find((o) => o.id === p.finalOptionId)?.items ?? p.items;
 }

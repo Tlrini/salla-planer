@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Copy, FolderOpen, Plus, Search, Trash } from 'lucide-react';
+import { ArrowLeft, Copy, FolderOpen, Plus, RotateCcw, Search, Trash, Trash2 } from 'lucide-react';
 import {
   formatDate,
   formatDateTime,
+  formatEUR,
   formatMeters,
   ProjectStatus,
+  TRASH_DAYS,
   type Project,
   type ProjectSummary,
+  type TrashedProject,
 } from '@salla/shared';
-import { api } from '../../api/client';
+import { api, ApiError } from '../../api/client';
 import { sq } from '../../i18n/sq';
 import { navigate } from '../../model/router';
 import { useDebounced } from '../../model/useDebounced';
@@ -25,6 +28,8 @@ export function ProjectsPage() {
   const [error, setError] = useState(false);
   const [creating, setCreating] = useState(false);
   const [toDelete, setToDelete] = useState<ProjectSummary | null>(null);
+  const [showTrash, setShowTrash] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const q = useDebounced(query, 250);
 
   const load = useCallback(async () => {
@@ -54,22 +59,39 @@ export function ProjectsPage() {
 
   const remove = async () => {
     if (!toDelete) return;
-    await api.del(`/api/projects/${toDelete.id}`);
+    setNotice(null);
+    try {
+      await api.del(`/api/projects/${toDelete.id}`);
+    } catch (err) {
+      if (!(err instanceof ApiError)) throw err;
+      if (err.status === 403) setNotice(sq.projects.deleteForbidden);
+    }
     setToDelete(null);
     await load();
   };
 
   const filtered = q || status || from || to;
 
+  if (showTrash) return <TrashView onBack={() => setShowTrash(false)} />;
+
   return (
     <AppShell active="projects">
       <div className="page-head">
         <h1 className="title-serif">{sq.projects.title}</h1>
+        <button type="button" className="btn" onClick={() => setShowTrash(true)}>
+          <Trash2 size={18} />
+          <span>{sq.projects.trash}</span>
+        </button>
         <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>
           <Plus size={18} />
           <span>{sq.projects.newProject}</span>
         </button>
       </div>
+      {notice && (
+        <p className="form-error" role="alert">
+          {notice}
+        </p>
+      )}
 
       <div className="filters">
         <label className="search">
@@ -142,11 +164,7 @@ export function ProjectsPage() {
               {p.clientComments ? (
                 <span className="pill pill-warn">{sq.share.badgeComments(p.clientComments)}</span>
               ) : null}
-              {p.paid > 0 && p.quoteTotal > 0 && (
-                <span className={`pill${p.paid >= p.quoteTotal ? ' pill-ok' : ''}`}>
-                  {sq.payments.badge(Math.min(100, Math.round((p.paid / p.quoteTotal) * 100)))}
-                </span>
-              )}
+              {p.quoteTotal > 0 && <span className="pill mono">{formatEUR(p.quoteTotal)}</span>}
               <div className="card-actions">
                 <button
                   type="button"
@@ -190,8 +208,77 @@ export function ProjectsPage() {
         confirmLabel={sq.projects.delete}
         danger
       >
-        <p>{toDelete ? sq.projects.deleteBody(toDelete.name) : ''}</p>
+        <p>{toDelete ? sq.projects.deleteBody(toDelete.name, TRASH_DAYS) : ''}</p>
       </ConfirmDialog>
+    </AppShell>
+  );
+}
+
+/** "Koshi": deleted projects, restorable until they are removed for good. */
+function TrashView({ onBack }: { onBack: () => void }) {
+  const [rows, setRows] = useState<TrashedProject[] | null>(null);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setRows(await api.get<TrashedProject[]>('/api/projects/trash'));
+      setError(false);
+    } catch {
+      setError(true);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const restore = async (p: TrashedProject) => {
+    try {
+      await api.post(`/api/projects/${p.id}/restore`);
+    } catch (err) {
+      if (!(err instanceof ApiError)) throw err;
+    }
+    await load();
+  };
+
+  return (
+    <AppShell active="projects">
+      <div className="page-head">
+        <h1 className="title-serif">{sq.projects.trashTitle}</h1>
+        <button type="button" className="btn" onClick={onBack}>
+          <ArrowLeft size={18} />
+          <span>{sq.projects.backToProjects}</span>
+        </button>
+      </div>
+      <p className="muted">{sq.projects.trashHint(TRASH_DAYS)}</p>
+      {error && <p className="form-error">{sq.errors.offline}</p>}
+      {rows?.length === 0 && <p className="muted empty">{sq.projects.trashEmpty}</p>}
+      <ul className="card-list">
+        {rows?.map((p) => (
+          <li key={p.id} className="card" data-testid="trash-row">
+            <div className="card-main">
+              <span className="card-title">{p.name}</span>
+              <span className="card-sub">
+                {p.clientName || sq.topbar.noClient} ·{' '}
+                {p.eventDate ? formatDate(p.eventDate) : sq.projects.noDate}
+              </span>
+              <span className="card-meta muted small">
+                {sq.projects.deletedBy(
+                  p.deletedBy,
+                  formatDateTime(p.deletedAt),
+                  formatDate(p.purgeAt.slice(0, 10)),
+                )}
+              </span>
+            </div>
+            <div className="card-side">
+              <span className={`status status-${p.status}`}>{sq.statuses[p.status]}</span>
+              <button type="button" className="btn" onClick={() => void restore(p)}>
+                <RotateCcw size={18} />
+                <span>{sq.projects.restore}</span>
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </AppShell>
   );
 }

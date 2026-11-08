@@ -6,6 +6,8 @@ export type Route =
   | { name: 'halls' }
   | { name: 'hall'; id: string }
   | { name: 'library' }
+  | { name: 'scan' }
+  | { name: 'scanHall' }
   | { name: 'calendar' }
   | { name: 'dashboard' }
   | { name: 'share'; token: string }
@@ -16,8 +18,10 @@ export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent);
   const [a, b] = parts;
   if (a === 'projects' && b) return { name: 'project', id: b };
+  if (a === 'halls' && b === 'scan') return { name: 'scanHall' };
   if (a === 'halls' && b) return { name: 'hall', id: b };
   if (a === 'halls') return { name: 'halls' };
+  if (a === 'library' && b === 'scan') return { name: 'scan' };
   if (a === 'library') return { name: 'library' };
   if (a === 'calendar') return { name: 'calendar' };
   if (a === 'dashboard') return { name: 'dashboard' };
@@ -36,6 +40,10 @@ export function routePath(r: Route): string {
       return '#/halls';
     case 'library':
       return '#/library';
+    case 'scan':
+      return '#/library/scan';
+    case 'scanHall':
+      return '#/halls/scan';
     case 'calendar':
       return '#/calendar';
     case 'dashboard':

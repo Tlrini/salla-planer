@@ -3,7 +3,9 @@ import { z } from 'zod';
 import {
   addUsage,
   catalogById,
+  chosenItems,
   Item,
+  ProjectExtra,
   shortages,
   usageOf,
   type CatalogItem,
@@ -23,6 +25,7 @@ interface EventRow {
   event_type: string;
   event_date: string;
   items: string;
+  extra: string;
 }
 
 /** Statuses that hold inventory; drafts are only tentative. */
@@ -31,15 +34,24 @@ const BOOKED = new Set(['konfirmuar', 'instaluar']);
 function rowsBetween(db: DB, from: string, to: string): EventRow[] {
   return db
     .prepare(
-      `SELECT id, name, client_name, status, event_type, event_date, items FROM projects
-       WHERE event_date >= ? AND event_date <= ? ORDER BY event_date, name`,
+      `SELECT id, name, client_name, status, event_type, event_date, items, extra FROM projects
+       WHERE event_date >= ? AND event_date <= ? AND deleted_at IS NULL ORDER BY event_date, name`,
     )
     .all(from, to) as EventRow[];
 }
 
+/** What an event takes from stock: the client's final option, or the open one if none is chosen. */
 function usage(row: EventRow, catalog: readonly CatalogItem[]) {
   try {
-    return usageOf(ItemList.parse(JSON.parse(row.items)), catalog);
+    const items = ItemList.parse(JSON.parse(row.items));
+    let extra: ProjectExtra = {};
+    try {
+      const parsed = ProjectExtra.safeParse(JSON.parse(row.extra || '{}'));
+      if (parsed.success) extra = parsed.data;
+    } catch {
+      // A damaged extra column still counts the open option.
+    }
+    return usageOf(chosenItems({ items, ...extra }), catalog);
   } catch {
     return new Map<string, number>();
   }

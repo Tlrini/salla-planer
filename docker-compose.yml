@@ -14,6 +14,8 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       # Only Caddy (fixed IP below) may report the client IP via X-Forwarded-For.
       TRUST_PROXY: 172.28.0.10
+      # In-page scanning (Beta 5): shared secret of the GPU worker; empty = scanning off.
+      SCAN_WORKER_TOKEN: ${SCAN_WORKER_TOKEN:-}
     volumes:
       # app.db, uploads/ (GLB models) and backups/ live here.
       - ./data:/app/data

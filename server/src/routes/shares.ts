@@ -3,7 +3,13 @@ import path from 'node:path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
-import { catalogById, projectFinance, type CatalogItem, type Project } from '@salla/shared';
+import {
+  catalogById,
+  projectTotal,
+  type CatalogItem,
+  type ClientNotice,
+  type Project,
+} from '@salla/shared';
 import { PUBLIC_SHARE_PREFIX } from '../constants.js';
 import type { DB } from '../db.js';
 import { readCatalog } from './catalog.js';
@@ -42,7 +48,7 @@ const CommentBody = z.object({
 /**
  * Client share links: a private, expiring, revocable link to a read-only view of the project
  * (plan, 3D walk, design options with totals). The client can approve an option and comment.
- * Guests, payments and internal notes are never included.
+ * Guests, costs and internal notes are never included.
  */
 export function registerShareRoutes(
   app: FastifyInstance,
@@ -150,6 +156,60 @@ export function registerShareRoutes(
     return comments(req.params.token);
   });
 
+  // ---- the agents' bell: client activity nobody has looked at yet ------------------------------
+  // "Seen" is per share link (shares.seen_at): opening the project's share dialog or clicking
+  // the notice marks it seen for everyone in the agency.
+
+  app.get('/api/notifications', async (): Promise<ClientNotice[]> => {
+    const approvals = db
+      .prepare(
+        `SELECT s.project_id AS pid, p.name AS pname, s.approved_by AS who,
+                s.approved_option_name AS text, s.approved_at AS at
+         FROM shares s JOIN projects p ON p.id = s.project_id
+         WHERE p.deleted_at IS NULL AND s.approved_at IS NOT NULL
+           AND (s.seen_at IS NULL OR s.approved_at > s.seen_at)`,
+      )
+      .all() as NoticeRow[];
+    const fresh = db
+      .prepare(
+        `SELECT s.project_id AS pid, p.name AS pname, c.author AS who, c.text AS text,
+                c.created_at AS at
+         FROM share_comments c
+         JOIN shares s ON s.token = c.token
+         JOIN projects p ON p.id = s.project_id
+         WHERE p.deleted_at IS NULL AND c.from_client = 1
+           AND (s.seen_at IS NULL OR c.created_at > s.seen_at)`,
+      )
+      .all() as NoticeRow[];
+    const notice =
+      (kind: ClientNotice['kind']) =>
+      (r: NoticeRow): ClientNotice => ({
+        projectId: r.pid,
+        projectName: r.pname,
+        kind,
+        by: r.who ?? '',
+        text: kind === 'comment' ? shorten(r.text ?? '', 80) : (r.text ?? ''),
+        at: r.at,
+      });
+    return [...approvals.map(notice('approved')), ...fresh.map(notice('comment'))]
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, 50);
+  });
+
+  app.post('/api/notifications/seen', async (req, reply) => {
+    const body = z
+      .object({ projectId: z.string().min(1).max(64).optional() })
+      .optional()
+      .safeParse(req.body ?? undefined);
+    if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
+    const now = new Date().toISOString();
+    const projectId = body.data?.projectId;
+    if (projectId)
+      db.prepare('UPDATE shares SET seen_at = ? WHERE project_id = ?').run(now, projectId);
+    else db.prepare('UPDATE shares SET seen_at = ?').run(now);
+    return { ok: true };
+  });
+
   // ---- client side (no account) ----------------------------------------------------------------
   const posts = new Map<string, { count: number; reset: number }>();
   const tooMany = (token: string) => {
@@ -192,7 +252,7 @@ export function registerShareRoutes(
         otherOptions: project.otherOptions,
         finalOptionId: project.finalOptionId,
         viewpoints: project.viewpoints,
-        // Needed for the totals shown per option; payments, guests and notes stay private.
+        // Needed for the totals shown per option; costs, guests and notes stay private.
         pricing: project.pricing
           ? { discountPercent: project.pricing.discountPercent, extras: project.pricing.extras }
           : undefined,
@@ -203,7 +263,7 @@ export function registerShareRoutes(
         version: project.version,
       },
       totals: Object.fromEntries(
-        options.map((o) => [o.id, projectFinance(o.items, project.pricing, [], catalog).total]),
+        options.map((o) => [o.id, projectTotal(o.items, project.pricing, catalog)]),
       ),
       catalog: used.map((c) => {
         const { modelFile, thumbnail, topView, stock: _stock, createdById: _id, ...rest } = c;
@@ -289,6 +349,16 @@ export function registerShareRoutes(
     },
   );
 }
+
+interface NoticeRow {
+  pid: string;
+  pname: string;
+  who: string | null;
+  text: string | null;
+  at: string;
+}
+
+const shorten = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 function notFound(reply: FastifyReply) {
   return reply.code(404).send({ error: 'not_found' });

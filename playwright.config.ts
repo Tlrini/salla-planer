@@ -7,6 +7,8 @@ const PORT = 3100;
 const dataDir = path.join(os.tmpdir(), `salla-e2e-${Date.now()}`);
 
 export const E2E_ADMIN = { user: 'e2e-admin', password: 'e2e-password-123' };
+/** The e2e test plays the GPU scan worker itself with this token (no GPU needed). */
+export const E2E_WORKER_TOKEN = 'e2e-worker-token-0123456789abcdef0123';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -30,6 +32,7 @@ export default defineConfig({
       DATA_DIR: dataDir,
       ADMIN_USER: E2E_ADMIN.user,
       ADMIN_PASSWORD: E2E_ADMIN.password,
+      SCAN_WORKER_TOKEN: E2E_WORKER_TOKEN,
     },
   },
 });

@@ -22,7 +22,7 @@ test('login → new project → add 3 items → 3D → export PDF', async ({ pag
     await page.getByRole('button', { name: `Shto: ${name}` }).click();
   }
   await page.keyboard.press('Escape'); // deselect → the right panel shows the summary
-  await expect(page.locator('.summary-table')).toContainText('Skenë / podium');
+  await expect(page.getByTestId('item-summary')).toContainText('Skenë / podium');
   await expect(page.locator('.save-status')).toContainText('U ruajt', { timeout: 10_000 });
 
   // 3D view

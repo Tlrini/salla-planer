@@ -7,6 +7,7 @@ import { loadCatalog } from '../../model/bootstrap';
 import { useSession } from '../../model/session';
 import { catalog, useCatalogVersion } from '../../model/store';
 import { ConfirmDialog } from '../editor/ConfirmDialog';
+import { ScanJobs } from '../scan/ScanJobs';
 import { AppShell } from '../shell/AppShell';
 import { ModelSetup } from './ModelSetup';
 
@@ -118,6 +119,7 @@ export function LibraryPage() {
           {sq.library[notice]}
         </p>
       )}
+      <ScanJobs purpose="decor" onDecorCreated={setEditing} />
 
       <div className="filters">
         <label className="search">

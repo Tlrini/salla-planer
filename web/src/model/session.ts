@@ -3,7 +3,8 @@ import type { SessionUser } from '@salla/shared';
 
 interface SessionState {
   user: SessionUser | null;
-  status: 'loading' | 'anon' | 'auth';
+  /** 'offline': the server did not answer at start (the on/off server is stopped). */
+  status: 'loading' | 'anon' | 'auth' | 'offline';
   set: (patch: Partial<Omit<SessionState, 'set'>>) => void;
 }
 

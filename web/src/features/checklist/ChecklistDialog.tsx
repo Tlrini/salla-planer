@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { nanoid } from 'nanoid';
 import { Check, FileDown, Plus, Trash } from 'lucide-react';
 import {
+  chosenItems,
   summarize,
   type CatalogCategory,
   type Checklist,
@@ -38,7 +39,8 @@ export function ChecklistDialog({ open, onClose }: { open: boolean; onClose: () 
 }
 
 function ChecklistBody({ onClose }: { onClose: () => void }) {
-  const items = useEditor((s) => s.project.items);
+  // The team loads what the client chose, even while another option is open in the editor.
+  const items = useEditor((s) => chosenItems(s.project));
   const checklist = useEditor((s) => s.project.checklist);
   const status = useEditor((s) => s.project.status);
   const lines = useMemo(() => summarize(items, catalog).lines, [items]);

@@ -3,10 +3,10 @@ import {
   BriefcaseBusiness,
   ChevronDown,
   ClipboardCheck,
+  FileSignature,
   History,
   Share2,
   Users,
-  Wallet,
 } from 'lucide-react';
 import { sq } from '../../i18n/sq';
 
@@ -28,8 +28,8 @@ const ChecklistDialog = lazy(() =>
   import('../checklist/ChecklistDialog').then((m) => ({ default: m.ChecklistDialog })),
 );
 
-const PaymentsDialog = lazy(() =>
-  import('../payments/PaymentsDialog').then((m) => ({ default: m.PaymentsDialog })),
+const ContractDialog = lazy(() =>
+  import('../contract/ContractDialog').then((m) => ({ default: m.ContractDialog })),
 );
 
 const HistoryDialog = lazy(() =>
@@ -44,7 +44,7 @@ const ShareDialog = lazy(() =>
 export const PROJECT_TOOLS: Tool[] = [
   { id: 'guests', label: sq.guests.menu, icon: Users, dialog: SeatingDialog },
   { id: 'checklist', label: sq.checklist.menu, icon: ClipboardCheck, dialog: ChecklistDialog },
-  { id: 'payments', label: sq.payments.menu, icon: Wallet, dialog: PaymentsDialog },
+  { id: 'contract', label: sq.contractDialog.menu, icon: FileSignature, dialog: ContractDialog },
   { id: 'share', label: sq.share.menu, icon: Share2, dialog: ShareDialog },
   { id: 'history', label: sq.history.menu, icon: History, dialog: HistoryDialog },
 ];

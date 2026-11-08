@@ -7,9 +7,19 @@
 #
 # Usage: BACKUP_TARGET=... deploy/backup-sync.sh
 set -eu
+# cron's PATH has no /snap/bin, where Ubuntu 24.04 installs the aws CLI.
+PATH="/snap/bin:/usr/local/bin:$PATH"
+export PATH
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DATA="$ROOT/data"
+# BACKUP_TARGET may come from the app's .env (the cron line no longer has to pass it).
+if [ -z "${BACKUP_TARGET:-}" ] && [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "$ROOT/.env"
+  set +a
+fi
 TARGET="${BACKUP_TARGET:?Set BACKUP_TARGET (s3://... or https://<account>.blob.core.windows.net/...)}"
 
 [ -d "$DATA/backups" ] || { echo "No $DATA/backups yet (the app creates it on start)." >&2; exit 1; }

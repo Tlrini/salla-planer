@@ -522,6 +522,31 @@ describe('design options (Beta 2)', () => {
     ).json() as Project;
     expect(copy.otherOptions?.map((o) => o.name)).toEqual(['Opsioni A']);
   });
+
+  it('a duplicate starts as a draft with an unchecked checklist', async () => {
+    const created = (
+      await req('POST', '/api/projects', admin, {
+        ...input,
+        name: 'Me listë pune',
+        status: 'konfirmuar',
+        checklist: {
+          lines: { table_round_10: { loaded: true, installed: true } },
+          tasks: [{ id: 'task1', text: 'Sill lulet', done: true, assignee: 'Genta' }],
+        },
+      })
+    ).json() as Project;
+
+    const copy = (
+      await req('POST', `/api/projects/${created.id}/duplicate`, admin)
+    ).json() as Project;
+    expect(copy.status).toBe('draft');
+    expect(copy.checklist).toEqual({
+      tasks: [{ id: 'task1', text: 'Sill lulet', done: false, assignee: 'Genta' }],
+    });
+    // The original keeps its progress.
+    const original = (await req('GET', `/api/projects/${created.id}`, admin)).json() as Project;
+    expect(original.checklist?.lines?.table_round_10?.installed).toBe(true);
+  });
 });
 
 describe('fixes from the alpha review', () => {
@@ -670,7 +695,7 @@ describe('agency settings and finance in the list', () => {
     expect((await req('PUT', '/api/settings/agency', agent, { name: 'X' })).statusCode).toBe(403);
     const saved = await req('PUT', '/api/settings/agency', admin, {
       name: 'Dekor Ëndrra',
-      iban: 'AL47',
+      nipt: 'L12345678A',
     });
     expect(saved.statusCode).toBe(200);
     expect((await req('GET', '/api/settings/agency', agent)).json()).toMatchObject({
@@ -678,7 +703,7 @@ describe('agency settings and finance in the list', () => {
     });
   });
 
-  it('lists the quote total and what was paid', async () => {
+  it('lists the quote total (no payments in the app)', async () => {
     const created = (
       await req('POST', '/api/projects', admin, {
         ...input,
@@ -696,7 +721,6 @@ describe('agency settings and finance in the list', () => {
           },
         ],
         pricing: { extras: [{ id: 'e', label: 'Transport', amount: 50 }] },
-        payments: [{ id: 'p', date: '2026-11-01', amount: 100, method: 'cash' }],
       })
     ).json() as Project;
     const row = (
@@ -708,12 +732,13 @@ describe('agency settings and finance in the list', () => {
     const stage = (
       (await req('GET', '/api/catalog', admin)).json() as Array<{ id: string; price: number }>
     ).find((c) => c.id === 'stage')!;
-    expect(row).toMatchObject({ id: created.id, quoteTotal: stage.price + 50, paid: 100 });
+    expect(row).toMatchObject({ id: created.id, quoteTotal: stage.price + 50 });
+    expect(row).not.toHaveProperty('paid');
   });
 });
 
 describe('version history', () => {
-  it('snapshots before saves (throttled), lists them and restores one, keeping payments', async () => {
+  it('snapshots before saves (throttled), lists them and restores one, keeping the status', async () => {
     const p0 = (
       await req('POST', '/api/projects', admin, { ...input, name: 'Historiku A' })
     ).json() as Project;
@@ -730,7 +755,7 @@ describe('version history', () => {
       await req('PUT', `/api/projects/${p0.id}`, admin, {
         ...p1,
         name: 'Historiku C',
-        payments: [{ id: 'pay', date: '2026-11-06', amount: 300, method: 'cash' }],
+        status: 'konfirmuar',
         version: p1.version,
       })
     ).json() as Project;
@@ -756,7 +781,7 @@ describe('version history', () => {
       })
     ).json() as Project;
     expect(restored).toMatchObject({ name: 'Historiku A', version: p2.version + 1 });
-    expect(restored.payments).toEqual(p2.payments);
+    expect(restored.status).toBe('konfirmuar');
     // The replaced state ("C") is now in the history too.
     const after = (await req('GET', `/api/projects/${p0.id}/versions`, admin)).json() as Array<{
       name: string;
@@ -786,7 +811,7 @@ describe('client share links', () => {
         option: { id: 'b', name: 'Opsioni B' },
         otherOptions: [{ id: 'a', name: 'Opsioni A', items: [] }],
         guests: [{ id: 'g', name: 'Sekret Mysafiri' }],
-        payments: [{ id: 'p', date: '2026-11-01', amount: 99, method: 'cash' }],
+        costs: [{ id: 'c', label: 'Transport', amount: 99 }],
         notes: 'shënim i brendshëm',
       })
     ).json() as Project;
@@ -803,7 +828,7 @@ describe('client share links', () => {
       catalog: Array<{ id: string; stock?: number }>;
     };
     expect(body.project).not.toHaveProperty('guests');
-    expect(body.project).not.toHaveProperty('payments');
+    expect(body.project).not.toHaveProperty('costs');
     expect(body.project).not.toHaveProperty('notes');
     expect(Object.keys(body.totals).sort()).toEqual(['a', 'b']);
     expect(body.catalog.map((c) => c.id)).toContain('table_round_10');

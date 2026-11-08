@@ -6,6 +6,7 @@ import { sq } from '../../i18n/sq';
 import { navigate } from '../../model/router';
 import { useSession } from '../../model/session';
 import { ConfirmDialog } from '../editor/ConfirmDialog';
+import { ScanJobs } from '../scan/ScanJobs';
 import { AppShell } from '../shell/AppShell';
 
 const NEW_HALL: Hall = {
@@ -68,6 +69,7 @@ export function HallsPage() {
         </button>
       </div>
       {error && <p className="form-error">{sq.errors.offline}</p>}
+      <ScanJobs purpose="hall" />
       {halls?.length === 0 && <p className="muted empty">{sq.halls.empty}</p>}
       <ul className="card-list">
         {halls?.map((t) => (

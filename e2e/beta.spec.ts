@@ -32,8 +32,10 @@ test('beta: scan library → decor on tables → option B → walk in 3D → PDF
   await price.press('Tab');
   await page.getByText('Vendoset mbi tavolinë').click();
   await page.getByRole('button', { name: 'Ruaj në bibliotekë' }).click();
-  await expect(page.locator('.library-card')).toContainText('Peonia testi');
-  await expect(page.locator('.library-card img')).toBeVisible();
+  // Other test files share this run's library (e.g. the scanned vase), so find our card.
+  const card = page.locator('.library-card').filter({ hasText: 'Peonia testi' });
+  await expect(card).toBeVisible();
+  await expect(card.locator('img')).toBeVisible();
 
   // New project with two round tables.
   await page.getByRole('button', { name: 'Projektet' }).click();
@@ -50,8 +52,8 @@ test('beta: scan library → decor on tables → option B → walk in 3D → PDF
   await page.getByRole('button', { name: 'Vendos dekorin: Peonia testi' }).click();
   await page.getByRole('button', { name: /Apliko te të gjitha tavolinat e këtij lloji/ }).click();
   await page.keyboard.press('Escape');
-  await expect(page.locator('.summary-table')).toContainText('Peonia testi');
-  await expect(page.locator('.summary-table')).toContainText('56,00 €');
+  await expect(page.getByTestId('item-summary')).toContainText('Peonia testi');
+  await expect(page.getByTestId('item-summary')).toContainText('56,00 €');
 
   // Option B with candles instead.
   await page.getByRole('button', { name: 'Opsion i ri' }).click();

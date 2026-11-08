@@ -7,6 +7,7 @@ import fastifyStatic from '@fastify/static';
 import { MAX_MODEL_BYTES } from '@salla/shared';
 import { registerAuth } from './auth.js';
 import { runDailyBackup } from './backup.js';
+import { cleanupImages } from './cleanup.js';
 import type { AppConfig } from './config.js';
 import { openDb, type DB } from './db.js';
 import { registerCatalogRoutes } from './routes/catalog.js';
@@ -15,7 +16,8 @@ import { registerImageRoutes } from './routes/images.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import { registerPlanningRoutes } from './routes/planning.js';
 import { registerSettingsRoutes } from './routes/settings.js';
-import { registerProjectRoutes } from './routes/projects.js';
+import { purgeTrash, registerProjectRoutes } from './routes/projects.js';
+import { registerScanRoutes } from './routes/scans.js';
 import { registerUploadRoutes } from './routes/uploads.js';
 import { registerUserRoutes } from './routes/users.js';
 import { seed } from './seed.js';
@@ -55,6 +57,7 @@ export async function buildApp(config: AppConfig): Promise<BuiltApp> {
   registerPlanningRoutes(app, db);
   registerSettingsRoutes(app, db);
   registerUserRoutes(app, db);
+  registerScanRoutes(app, db, config.dataDir, config.scanWorkerToken);
 
   // Uploaded GLB models.
   const uploads = path.join(config.dataDir, 'uploads');
@@ -81,12 +84,22 @@ export async function buildApp(config: AppConfig): Promise<BuiltApp> {
     });
   }
 
-  // Nightly backup: check hourly, copy once per day, keep 14 days.
+  // Nightly backup: check hourly, copy once per day, keep 14 days. Then remove floor-plan
+  // photos nothing uses any more.
   if (config.dbPath !== ':memory:') {
     const backup = () =>
-      runDailyBackup(db, config.dataDir).catch((err: unknown) =>
-        app.log.error(err, 'backup failed'),
-      );
+      runDailyBackup(db, config.dataDir)
+        .catch((err: unknown) => app.log.error(err, 'backup failed'))
+        .then(() => {
+          try {
+            const purged = purgeTrash(db);
+            if (purged) app.log.info({ purged }, 'removed projects from the bin');
+            const removed = cleanupImages(db, config.dataDir);
+            if (removed.length) app.log.info({ removed }, 'removed unused floor-plan photos');
+          } catch (err) {
+            app.log.error(err, 'cleanup failed');
+          }
+        });
     app.addHook('onReady', async () => {
       void backup();
     });

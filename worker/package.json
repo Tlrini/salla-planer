@@ -1,0 +1,23 @@
+{
+  "name": "salla-scan-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "GPU worker for in-page scanning (Beta 5). Built and run on its own VM; not an npm workspace of the app.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "meshoptimizer": "1.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  }
+}

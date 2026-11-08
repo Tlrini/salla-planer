@@ -58,6 +58,41 @@ async function request<T>(
   return data as T;
 }
 
+/**
+ * POST a form and report upload progress (0–1). fetch() cannot report upload progress, so this
+ * uses XMLHttpRequest; errors behave like the other requests (ApiError, 401 → login screen).
+ */
+function uploadWithProgress<T>(
+  path: string,
+  form: FormData,
+  onProgress: (fraction: number) => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', path);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+    };
+    xhr.onerror = () => reject(new ApiError(0, null));
+    xhr.onabort = () => reject(new ApiError(0, null));
+    xhr.onload = () => {
+      let data: unknown = null;
+      try {
+        data = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        // Not JSON (e.g. a proxy error page).
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data as T);
+        return;
+      }
+      if (xhr.status === 401) useSession.getState().set({ user: null, status: 'anon' });
+      reject(new ApiError(xhr.status, data as Record<string, unknown> | null));
+    };
+    xhr.send(form);
+  });
+}
+
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body ?? {}),
@@ -65,4 +100,5 @@ export const api = {
     request<T>('PUT', path, body, opts),
   del: <T>(path: string) => request<T>('DELETE', path),
   upload: <T>(path: string, form: FormData) => request<T>('POST', path, form),
+  uploadWithProgress,
 };

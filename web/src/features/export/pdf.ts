@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import {
   catalogById,
+  chosenItems,
   occupancy,
   seatingTables,
   formatDate,
@@ -445,7 +446,8 @@ export function buildChecklistPdf(
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4', compress: true });
   setupFonts(doc, fonts);
   const byId = catalogById(catalog);
-  const lines = summarize(project.items, catalog).lines;
+  // Same lines as the checklist dialog: the client's final option.
+  const lines = summarize(chosenItems(project), catalog).lines;
   const entries = project.checklist?.lines ?? {};
   const colX = { qty: 150, stages: [190, 225, 260] };
   const top = () => {

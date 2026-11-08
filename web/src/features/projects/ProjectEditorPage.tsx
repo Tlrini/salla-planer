@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { HallTemplate, Project } from '@salla/shared';
 import { api, ApiError } from '../../api/client';
 import { sq } from '../../i18n/sq';
-import { flushSave, resetAutosave } from '../../model/autosave';
+import { flushSave, resetAutosave, restoreUnsaved } from '../../model/autosave';
 import { loadCatalog } from '../../model/bootstrap';
 import { navigate } from '../../model/router';
 import { useEditor } from '../../model/store';
@@ -27,11 +27,14 @@ function useOpen(kind: 'project' | 'hall', id: string): Load {
           if (cancelled) return;
           useEditor.getState().openProject(p);
           resetAutosave(useEditor.getState().project);
+          restoreUnsaved('project', p.id, p.version, p.updatedBy);
         } else {
           const [t] = await Promise.all([api.get<HallTemplate>(`/api/halls/${id}`), catalogReady]);
           if (cancelled) return;
           useEditor.getState().openHall(t.id, t.hall, t.version);
           resetAutosave(useEditor.getState().project);
+          // Same default as openHall: built-in example halls have no version.
+          restoreUnsaved('hall', t.id, t.version ?? 0, t.updatedBy);
         }
         setState('ready');
       } catch (err) {

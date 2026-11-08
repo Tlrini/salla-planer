@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
-import { Project, projectFinance } from '@salla/shared';
+import { chosenItems, Project, projectTotal } from '@salla/shared';
 import type { DB } from '../db.js';
+import { projectFor } from '../visibility.js';
 import { readCatalog } from './catalog.js';
 
 /** At most one automatic snapshot per project in this window (unless another person edits). */
@@ -73,7 +74,12 @@ export function registerVersionRoutes(
       )
       .all(req.params.id) as SnapshotRow[];
     return rows.flatMap((r) => {
-      const parsed = Project.safeParse(JSON.parse(r.data));
+      let parsed: ReturnType<typeof Project.safeParse>;
+      try {
+        parsed = Project.safeParse(JSON.parse(r.data));
+      } catch {
+        return []; // a damaged snapshot must not hide all the others
+      }
       if (!parsed.success) return [];
       const p = parsed.data;
       return [
@@ -86,7 +92,7 @@ export function registerVersionRoutes(
           itemCount: p.items.length,
           optionCount: 1 + (p.otherOptions?.length ?? 0),
           guestCount: p.guests?.length ?? 0,
-          total: projectFinance(p.items, p.pricing, p.payments, catalog).total,
+          total: projectTotal(chosenItems(p), p.pricing, catalog),
         },
       ];
     });
@@ -107,20 +113,34 @@ export function registerVersionRoutes(
         .prepare('SELECT data FROM project_versions WHERE id = ? AND project_id = ?')
         .get(req.params.vid, req.params.id) as { data: string } | undefined;
       if (!row) return reply.code(404).send({ error: 'not_found' });
-      const old = Project.safeParse(JSON.parse(row.data));
+      let old: ReturnType<typeof Project.safeParse>;
+      try {
+        old = Project.safeParse(JSON.parse(row.data));
+      } catch {
+        return reply.code(422).send({ error: 'unreadable_snapshot' });
+      }
       if (!old.success) return reply.code(422).send({ error: 'unreadable_snapshot' });
       const who = req.user!.displayName;
       const restored = db.transaction(() => {
         // The state being replaced stays in the history, so a restore can itself be undone.
         snapshotBeforeSave(db, current, who, new Date(), true);
-        // Money and progress are records, not design: keep today's payments and status.
+        // Progress is a record, not design: keep today's status and the team checklist (what
+        // was loaded, installed, returned).
         return writeProject(
           current,
-          { ...old.data, payments: current.payments, status: current.status },
+          {
+            ...old.data,
+            status: current.status,
+            checklist: current.checklist,
+            // The agency's costs are bookkeeping too (and agents must not change them).
+            costs: current.costs,
+          },
           who,
         );
       })();
-      return restored ?? reply.code(409).send({ error: 'conflict' });
+      return restored
+        ? projectFor(restored, req.user)
+        : reply.code(409).send({ error: 'conflict' });
     },
   );
 }

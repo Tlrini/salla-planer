@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project } from '@salla/shared';
-import { flushSave, hasUnsavedChanges, resetAutosave } from './autosave';
+import { flushSave, hasUnsavedChanges, resetAutosave, restoreUnsaved } from './autosave';
 import { newProject, useEditor } from './store';
 import { useUi } from './ui';
 
@@ -135,5 +135,41 @@ describe('autosave', () => {
     calls[1]!.respond(200, { version: 5 });
     await vi.advanceTimersByTimeAsync(0);
     expect(status()).toBe('saved');
+  });
+
+  it('keeps edits when the login expired and puts them back after the next login', async () => {
+    const reopen = (p: Project, version: number) => {
+      useEditor.getState().openProject({ ...p, version });
+      resetAutosave(useEditor.getState().project);
+    };
+    const expire = async () => {
+      const done = flushSave();
+      await tick();
+      calls[calls.length - 1]!.respond(401, { error: 'unauthorized' });
+      await done;
+    };
+
+    const p = open();
+    edit('Pa ruajtur');
+    await expire();
+    expect(status()).toBe('error');
+    // Logged in again; the server still has version 4: the edits come back and need saving.
+    reopen(p, 4);
+    expect(restoreUnsaved('project', p.id, 4, 'Arta')).toBe(true);
+    expect(useEditor.getState().project.name).toBe('Pa ruajtur');
+    expect(hasUnsavedChanges()).toBe(true);
+    expect(status()).not.toBe('conflict');
+    // Only once.
+    expect(restoreUnsaved('project', p.id, 4, 'Arta')).toBe(false);
+
+    // Someone else saved in between: the conflict dialog decides, nothing is overwritten.
+    edit('Prapë pa ruajtur');
+    await expire();
+    reopen(p, 7);
+    expect(restoreUnsaved('project', p.id, 7, 'Arta')).toBe(true);
+    expect(useUi.getState().save).toEqual({ kind: 'conflict', by: 'Arta' });
+    expect(useEditor.getState().project.name).toBe('Prapë pa ruajtur');
+    // A different project never receives them.
+    expect(restoreUnsaved('project', 'other', 1, 'Arta')).toBe(false);
   });
 });

@@ -1,4 +1,11 @@
-import { projectFinance, summarize, type CatalogItem, type Project } from '@salla/shared';
+import {
+  chosenItems,
+  projectProfit,
+  projectTotal,
+  summarize,
+  type CatalogItem,
+  type Project,
+} from '@salla/shared';
 
 export interface MonthStats {
   /** Events in the month (by event date). */
@@ -8,8 +15,8 @@ export interface MonthStats {
   revenue: number;
   /** Quote totals of drafts (offers not confirmed yet), by event month. */
   pipeline: number;
-  /** Payments received, by payment date. */
-  paid: number;
+  /** Profit of confirmed/installed events (revenue − decor cost − other costs), by event month. */
+  profit: number;
 }
 
 export interface Stats {
@@ -20,11 +27,12 @@ export interface Stats {
     drafts: number;
     revenue: number;
     pipeline: number;
-    paid: number;
-    outstanding: number;
     /** Booked / (booked + drafts), 0–1. */
     conversion: number;
     averageValue: number;
+    /** Profit of booked events and its share of their revenue (0–1). */
+    profit: number;
+    margin: number;
   };
   topItems: Array<{ type: string; name: string; quantity: number; revenue: number }>;
   agents: Array<{ name: string; booked: number; revenue: number }>;
@@ -35,7 +43,6 @@ export interface Stats {
     eventDate: string;
     status: Project['status'];
     total: number;
-    paid: number;
   }>;
 }
 
@@ -54,34 +61,31 @@ export function computeStats(
     booked: 0,
     revenue: 0,
     pipeline: 0,
-    paid: 0,
+    profit: 0,
   }));
   const prefix = `${year}-`;
   const items = new Map<string, { name: string; quantity: number; revenue: number }>();
   const agents = new Map<string, { booked: number; revenue: number }>();
   let booked = 0;
   let drafts = 0;
-  let paidBooked = 0;
-  let outstanding = 0;
 
   for (const p of projects) {
-    for (const pay of p.payments ?? [])
-      if (pay.date.startsWith(prefix)) months[Number(pay.date.slice(5, 7)) - 1]!.paid += pay.amount;
     if (!p.eventDate?.startsWith(prefix)) continue;
     const m = months[Number(p.eventDate.slice(5, 7)) - 1]!;
-    const f = projectFinance(p.items, p.pricing, p.payments, catalog);
+    // The client's final option, not whichever option the agent left open.
+    const chosen = chosenItems(p);
+    const total = projectTotal(chosen, p.pricing, catalog);
     m.events++;
     if (BOOKED.has(p.status)) {
       booked++;
       m.booked++;
-      m.revenue += f.total;
-      paidBooked += f.paid;
-      outstanding += f.balance;
+      m.revenue += total;
+      m.profit += projectProfit(chosen, p.pricing, p.costs, catalog).profit;
       const a = agents.get(p.createdBy) ?? { booked: 0, revenue: 0 };
       a.booked++;
-      a.revenue += f.total;
+      a.revenue += total;
       agents.set(p.createdBy, a);
-      for (const l of summarize(p.items, catalog).lines) {
+      for (const l of summarize(chosen, catalog).lines) {
         const it = items.get(l.type) ?? { name: l.name, quantity: 0, revenue: 0 };
         it.quantity += l.quantity;
         it.revenue += l.total;
@@ -89,15 +93,16 @@ export function computeStats(
       }
     } else {
       drafts++;
-      m.pipeline += f.total;
+      m.pipeline += total;
     }
   }
   for (const m of months) {
     m.revenue = cents(m.revenue);
     m.pipeline = cents(m.pipeline);
-    m.paid = cents(m.paid);
+    m.profit = cents(m.profit);
   }
   const revenue = cents(months.reduce((s, m) => s + m.revenue, 0));
+  const profit = cents(months.reduce((s, m) => s + m.profit, 0));
 
   return {
     year,
@@ -107,10 +112,10 @@ export function computeStats(
       drafts,
       revenue,
       pipeline: cents(months.reduce((s, m) => s + m.pipeline, 0)),
-      paid: cents(paidBooked),
-      outstanding: cents(outstanding),
       conversion: booked + drafts ? booked / (booked + drafts) : 0,
       averageValue: booked ? cents(revenue / booked) : 0,
+      profit,
+      margin: revenue > 0 ? profit / revenue : 0,
     },
     topItems: [...items.entries()]
       .map(([type, v]) => ({ type, ...v, revenue: cents(v.revenue) }))
@@ -124,17 +129,13 @@ export function computeStats(
       .filter((p) => p.eventDate && p.eventDate >= today)
       .sort((a, b) => a.eventDate!.localeCompare(b.eventDate!))
       .slice(0, 6)
-      .map((p) => {
-        const f = projectFinance(p.items, p.pricing, p.payments, catalog);
-        return {
-          id: p.id,
-          name: p.name,
-          clientName: p.clientName,
-          eventDate: p.eventDate!,
-          status: p.status,
-          total: f.total,
-          paid: f.paid,
-        };
-      }),
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        clientName: p.clientName,
+        eventDate: p.eventDate!,
+        status: p.status,
+        total: projectTotal(chosenItems(p), p.pricing, catalog),
+      })),
   };
 }

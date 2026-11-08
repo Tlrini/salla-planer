@@ -3,6 +3,7 @@ import { Star } from 'lucide-react';
 import { formatEUR, quoteTotals, summarize, type Project } from '@salla/shared';
 import { sq } from '../../i18n/sq';
 import { activeOption, allOptions, catalog, useCatalogVersion, useEditor } from '../../model/store';
+import { ProfitEditor } from './ProfitEditor';
 import { QuoteEditor } from './QuoteEditor';
 
 /** Totals of every design option side by side; tap one to switch to it. */
@@ -78,7 +79,7 @@ export function Summary() {
       {summary.lines.length === 0 ? (
         <p className="muted">{sq.summary.empty}</p>
       ) : (
-        <table className="summary-table">
+        <table className="summary-table" data-testid="item-summary">
           <tbody>
             {summary.lines.map((l) => (
               <tr key={l.type}>
@@ -97,6 +98,7 @@ export function Summary() {
         </table>
       )}
       {summary.lines.length > 0 && <QuoteEditor subtotal={summary.total} />}
+      {summary.lines.length > 0 && <ProfitEditor />}
       {(project.otherOptions?.length ?? 0) > 0 && (
         <OptionsComparison project={project} version={catalogVersion} />
       )}

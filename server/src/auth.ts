@@ -2,12 +2,17 @@ import crypto from 'node:crypto';
 import bcrypt from 'bcrypt';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { LoginBody, type SessionUser } from '@salla/shared';
+import { markActivity } from './activity.js';
 import type { DB } from './db.js';
-import { PUBLIC_SHARE_PREFIX } from './constants.js';
+import { PUBLIC_SHARE_PREFIX, WORKER_PREFIX } from './constants.js';
 import { BCRYPT_ROUNDS } from './seed.js';
 
 export const SESSION_COOKIE = 'salla_sid';
 const SESSION_DAYS = 30;
+const DAY_MS = 86_400_000;
+export const SESSION_MS = SESSION_DAYS * DAY_MS;
+/** A session used with less than this left gets a fresh 30 days (so: at most once a day). */
+const SESSION_REFRESH_BELOW_MS = SESSION_MS - DAY_MS;
 const LOGIN_WINDOW_MS = 60_000;
 const LOGIN_MAX_ATTEMPTS = 10;
 
@@ -24,6 +29,8 @@ interface UserRow {
   password_hash: string;
   role: 'admin' | 'agent';
   active: number;
+  /** Only in session lookups. */
+  session_expires?: number;
 }
 
 const toSessionUser = (r: UserRow): SessionUser => ({
@@ -48,19 +55,45 @@ export function registerAuth(app: FastifyInstance, db: DB, secureCookies: boolea
   };
 
   const userBySession = db.prepare(
-    `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ? AND s.expires_at > ? AND u.active = 1`,
+    `SELECT u.*, s.expires_at AS session_expires FROM sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token = ? AND s.expires_at > ? AND u.active = 1`,
   );
+  const extendSession = db.prepare('UPDATE sessions SET expires_at = ? WHERE token = ?');
+  const setSessionCookie = (reply: FastifyReply, token: string, expires: number) =>
+    reply.setCookie(SESSION_COOKIE, token, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: secureCookies,
+      expires: new Date(expires),
+    });
 
   // Every /api route except the public ones needs a valid session.
   app.addHook('onRequest', async (req, reply) => {
     const url = req.url.split('?')[0]!;
     if (!PROTECTED_PREFIXES.some((p) => url.startsWith(p)) || PUBLIC.has(url)) return;
-    // Client share links work without an account; each route checks its own token.
-    if (url.startsWith(PUBLIC_SHARE_PREFIX)) return;
+    // Client share links work without an account; each route checks its own token. A client
+    // looking at the plan counts as use of the app (the auto-stop waits).
+    if (url.startsWith(PUBLIC_SHARE_PREFIX)) {
+      markActivity();
+      return;
+    }
+    // The scan worker has no account; its routes check the worker token (routes/scans.ts).
+    // Its polls (and the starter's) never count as use of the app.
+    if (url.startsWith(WORKER_PREFIX)) return;
     const token = req.cookies[SESSION_COOKIE];
-    const row = token ? (userBySession.get(token, Date.now()) as UserRow | undefined) : undefined;
-    if (!row) return reply.code(401).send({ error: 'unauthorized' });
+    const now = Date.now();
+    const row = token ? (userBySession.get(token, now) as UserRow | undefined) : undefined;
+    if (!token || !row) return reply.code(401).send({ error: 'unauthorized' });
     req.user = toSessionUser(row);
+    markActivity(now);
+    // Sliding session: someone who keeps working is never logged out in the middle of it. The
+    // expiry moves at most once a day, so this is one small write per user per day.
+    if (row.session_expires !== undefined && row.session_expires - now < SESSION_REFRESH_BELOW_MS) {
+      const expires = now + SESSION_MS;
+      extendSession.run(expires, token);
+      setSessionCookie(reply, token, expires);
+    }
   });
 
   app.post('/api/auth/login', async (req, reply) => {
@@ -85,20 +118,14 @@ export function registerAuth(app: FastifyInstance, db: DB, secureCookies: boolea
     }
     attempts.delete(ip);
     const token = crypto.randomBytes(32).toString('hex');
-    const expires = now + SESSION_DAYS * 86_400_000;
+    const expires = now + SESSION_MS;
     db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
     db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(
       token,
       row.id,
       expires,
     );
-    reply.setCookie(SESSION_COOKIE, token, {
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: secureCookies,
-      expires: new Date(expires),
-    });
+    setSessionCookie(reply, token, expires);
     return toSessionUser(row);
   });
 

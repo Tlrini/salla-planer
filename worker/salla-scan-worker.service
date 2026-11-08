@@ -1,0 +1,13 @@
+[Unit]
+Description=Salla Planner scan worker (runs once per boot, then powers the VM off)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/salla-worker/run-once.sh
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

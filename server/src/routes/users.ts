@@ -50,16 +50,23 @@ export function registerUserRoutes(app: FastifyInstance, db: DB): void {
     if (exists) return reply.code(409).send({ error: 'username_taken' });
     const id = nanoid();
     const hash = await bcrypt.hash(body.data.password, BCRYPT_ROUNDS);
-    db.prepare(
-      'INSERT INTO users (id, username, display_name, password_hash, role, active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
-    ).run(
-      id,
-      body.data.username,
-      body.data.displayName,
-      hash,
-      body.data.role,
-      new Date().toISOString(),
-    );
+    try {
+      db.prepare(
+        'INSERT INTO users (id, username, display_name, password_hash, role, active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)',
+      ).run(
+        id,
+        body.data.username,
+        body.data.displayName,
+        hash,
+        body.data.role,
+        new Date().toISOString(),
+      );
+    } catch (err) {
+      // Two admins created the same username at the same moment (hashing takes ~100 ms).
+      if ((err as { code?: string }).code === 'SQLITE_CONSTRAINT_UNIQUE')
+        return reply.code(409).send({ error: 'username_taken' });
+      throw err;
+    }
     return reply
       .code(201)
       .send(toUser(db.prepare(`SELECT ${COLUMNS} FROM users WHERE id = ?`).get(id) as UserRow));

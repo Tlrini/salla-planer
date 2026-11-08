@@ -430,18 +430,42 @@ the same rules as section 14 apply (build + tests pass before the next one start
 
 Later (not in beta): read-only client link, whole-room scan as hall template, editing in 3D.
 
-**Status (2026-11-06):** Beta 0–4 are built and tested (see README). Beta 5 waits for the
-decision gate above. Also added: hall templates use version checks like projects (examples are
+**Status (2026-11-06):** Beta 0–4 are built and tested (see README). Beta 5 decision gate
+passed (user approved): AWS EC2 g4dn.xlarge in eu-central-1, on demand; Meshroom/AliceVision
+(MPL-2.0) in its own worker container; worker-only dependencies @gltf-transform/core,
+@gltf-transform/functions, meshoptimizer. Beta 5 code: `scan_jobs` (migration 7),
+`server/src/routes/scans.ts` (agent routes + token-protected `/api/worker/`),
+`web/src/features/scan/` (capture page, job list, crop box), `worker/` (GPU worker, not a
+workspace), `deploy/scan-starter.sh` (host cron starts the VM). Not yet run on a real GPU VM.
+Hosting changed (user approved, 2026-11-06): the app server is an on/off EC2 t3.medium with an
+Elastic IP instead of always-on Lightsail; `deploy/idle-stop.sh` powers it off after an idle
+hour (reads `GET /api/worker/status`, activity from `server/src/activity.ts`), and
+`deploy/start-link/index.mjs` (AWS Lambda) lets agents start it.
+Also added (2026-11-06): editing in 3D (`viewer3d/Edit3D.tsx`, pure picking in
+`viewer3d/picking.ts`, drag preview in `viewer3d/drag3d.ts`); whole-hall scans
+(`scan_jobs.purpose` – migration 8, `POST /api/scans/:id/finish-hall`,
+`scan/HallScanDialog.tsx`: the plan photo is a top view of the scan cut at 1,2 m); review fixes:
+edits survive an expired login (`model/autosave.ts` stash), sliding 30-day sessions, unused
+floor-plan photos removed daily (`server/src/cleanup.ts`), library deletion also checks saved
+versions.
+Later the same day: money, stock, contract and checklist use the client's final option
+(`chosenItems` in `shared/geometry.ts`); project bin (`projects.deleted_at` – migration 9, purge
+after `TRASH_DAYS`, confirmed events deletable only by creator/admin); profit
+(`CatalogItem.cost`, `Project.costs`, `projectProfit`; costs hidden from agents by
+`server/src/visibility.ts`); client notices (`/api/notifications`, bell in the header); copies
+drop the guest list; server-off page + service worker (`web/public/sw.js`, start link in
+`AgencySettings.startLink`). Also added: hall templates use version checks like projects (examples are
 admin-only), and a quote with discount and extra services (`Project.pricing`) in the summary and
 the PDF. Beta project fields (options, viewpoints, pricing) are stored in the `extra` JSON column
 of `projects` (migration 2); hall versions came with migration 3.
 
 **Post-beta features (2026-11-06):** guest list + seating (`Project.guests`, `shared/seating.ts`),
 inventory stock (`CatalogItem.stock`, `/api/availability`, `/api/calendar`), event calendar, team
-checklist (`Project.checklist`), payments + agency settings + contract PDF (`Project.payments`,
-`settings` table – migration 4), version history (`project_versions` – migration 5), client share
+checklist (`Project.checklist`), agency settings + contract PDF (`settings` table – migration 4;
+**payments were removed on the user's request: the app never records payments, deposits or
+balances**), version history (`project_versions` – migration 5), client share
 links (`shares`, `share_comments` – migration 6; public routes under `/api/public/share/`, they
-never expose guests, payments or notes), floor-plan photo (`Hall.underlay`, `/api/images`), plan
+never expose guests, costs or notes), floor-plan photo (`Hall.underlay`, `/api/images`), plan
 annotations (`Project.annotations`), and the admin dashboard (`/api/stats`, `server/src/stats.ts`).
 Project tools open from the editor's "Projekti" menu.
 

@@ -50,7 +50,7 @@ export const ProjectInput = Project.pick({
   pricing: true,
   guests: true,
   checklist: true,
-  payments: true,
+  costs: true,
   annotations: true,
   notes: true,
 });
@@ -67,12 +67,12 @@ export const ProjectSummary = Project.omit({
   guests: true,
   checklist: true,
   annotations: true,
+  costs: true,
 }).extend({
   itemCount: z.number().int(),
   optionCount: z.number().int(),
-  /** Quote total and payments received, for the list badge and the dashboard. */
+  /** Quote total of the client's final option (the open one if none is chosen yet). */
   quoteTotal: z.number(),
-  paid: z.number(),
   /** Option the client approved through a share link, and their unread comments. */
   clientApproved: z.string().optional(),
   clientComments: z.number().int().optional(),
@@ -105,7 +105,11 @@ export const HallInput = z.object({
 });
 export type HallInput = z.infer<typeof HallInput>;
 
-export const CatalogUpdate = CatalogItem.omit({ id: true, modelFile: true }).partial();
+/** Admin catalog edit. `null` clears an optional number (stock no longer tracked, no cost). */
+export const CatalogUpdate = CatalogItem.omit({ id: true, modelFile: true }).partial().extend({
+  stock: CatalogItem.shape.stock.unwrap().nullable().optional(),
+  cost: CatalogItem.shape.cost.unwrap().nullable().optional(),
+});
 export type CatalogUpdate = z.infer<typeof CatalogUpdate>;
 
 /** Max upload size for .glb models (admin model for a built-in type). */
@@ -136,6 +140,8 @@ export const LibraryUpdate = CatalogItem.pick({
     // Library decor lives with the decorations, never as hall structure.
     category: CatalogItem.shape.category.exclude(['structure']).optional(),
     name: z.string().trim().min(1).max(120).optional(),
+    // null = stock no longer tracked.
+    stock: CatalogItem.shape.stock.unwrap().nullable().optional(),
   });
 export type LibraryUpdate = z.infer<typeof LibraryUpdate>;
 
@@ -155,7 +161,7 @@ export const ProjectExtra = Project.pick({
   pricing: true,
   guests: true,
   checklist: true,
-  payments: true,
+  costs: true,
   annotations: true,
 }).partial();
 export type ProjectExtra = z.infer<typeof ProjectExtra>;
@@ -169,9 +175,42 @@ export const AgencySettings = z.object({
   email: z.string().trim().max(120).optional(),
   /** Albanian/Kosovo business number (NIPT / NUI). */
   nipt: z.string().trim().max(40).optional(),
-  bank: z.string().trim().max(120).optional(),
-  iban: z.string().trim().max(40).optional(),
   /** Contract terms (one paragraph per line); empty = the default terms. */
   contractTerms: z.string().max(8000).optional(),
+  /**
+   * "Start link" of the on/off server (AWS Lambda, docs/deploy-cloud.md §2.7). The app keeps a
+   * copy in the browser and offers it when the server cannot be reached.
+   */
+  startLink: z
+    .union([z.literal(''), z.string().trim().url().startsWith('https://').max(500)])
+    .optional(),
 });
 export type AgencySettings = z.infer<typeof AgencySettings>;
+
+/** A deleted project waiting in the bin ("Koshi"); removed for good after TRASH_DAYS. */
+export const TrashedProject = z.object({
+  id: z.string(),
+  name: z.string(),
+  clientName: z.string(),
+  eventDate: z.string().optional(),
+  status: Project.shape.status,
+  deletedAt: z.string(),
+  deletedBy: z.string(),
+  /** When it disappears for good. */
+  purgeAt: z.string(),
+});
+export type TrashedProject = z.infer<typeof TrashedProject>;
+export const TRASH_DAYS = 30;
+
+/** Client activity on share links the agency has not looked at yet (the bell). */
+export const ClientNotice = z.object({
+  projectId: z.string(),
+  projectName: z.string(),
+  kind: z.enum(['approved', 'comment']),
+  /** Client's name. */
+  by: z.string(),
+  /** The approved option's name, or the start of the comment. */
+  text: z.string(),
+  at: z.string(),
+});
+export type ClientNotice = z.infer<typeof ClientNotice>;

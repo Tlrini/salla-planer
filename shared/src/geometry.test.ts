@@ -33,7 +33,8 @@ import {
   usageOf,
   addUsage,
   shortages,
-  projectFinance,
+  projectTotal,
+  chosenItems,
 } from './geometry.js';
 import type { CatalogItem } from './schemas.js';
 
@@ -52,6 +53,37 @@ const mk = (type: string, x: number, y: number, extra: Partial<Item> = {}): Item
     ...extra,
   };
 };
+
+describe('review fixes', () => {
+  it('the final option counts for money and stock, not the open one', () => {
+    const a = [mk('table_round_10', 5, 5)];
+    const b = [mk('stage', 10, 2)];
+    const project = {
+      items: a,
+      option: { id: 'a' },
+      otherOptions: [{ id: 'b', items: b }],
+      finalOptionId: 'b',
+    };
+    expect(chosenItems(project)).toBe(b);
+    expect(chosenItems({ ...project, finalOptionId: 'a' })).toBe(a);
+    expect(chosenItems({ ...project, finalOptionId: undefined })).toBe(a);
+    // A single-option project is option "A".
+    expect(chosenItems({ items: a, finalOptionId: 'A' })).toBe(a);
+    // A final option that no longer exists falls back to the open one.
+    expect(chosenItems({ ...project, finalOptionId: 'gone' })).toBe(a);
+  });
+
+  it('a turned oval keeps an ellipse-shaped bounding box', () => {
+    const oval: CatalogItem = { ...cat.get('plant')!, id: 'oval', shape2d: 'circle' };
+    const item = mk('plant', 0, 0, { type: 'oval', width: 2, depth: 1, rotation: 90 });
+    const e = halfExtents(item, oval);
+    expect(e.hx).toBeCloseTo(0.5);
+    expect(e.hy).toBeCloseTo(1);
+    // Round items are unchanged by rotation.
+    const round = halfExtents(mk('plant', 0, 0, { rotation: 45 }), cat.get('plant'));
+    expect(round.hx).toBeCloseTo(cat.get('plant')!.width / 2);
+  });
+});
 
 describe('snap', () => {
   it('snaps to 10 cm without float noise', () => {
@@ -448,16 +480,15 @@ describe('inventory', () => {
   });
 });
 
-describe('project finance', () => {
-  it('total after discount and services, deposit, paid and balance', () => {
+describe('project total', () => {
+  it('total after discount and services', () => {
     const items = [mk('table_round_10', 5, 5)]; // 25 € + 10 chairs × 3 € = 55 €
-    const f = projectFinance(
+    const total = projectTotal(
       items,
-      { discountPercent: 10, depositPercent: 30, extras: [{ label: 'Transport', amount: 50.5 }] },
-      [{ amount: 40 }, { amount: 20 }],
+      { discountPercent: 10, extras: [{ label: 'Transport', amount: 50.5 }] },
       DEFAULT_CATALOG,
     );
-    expect(f).toEqual({ total: 100, deposit: 30, paid: 60, balance: 40, paidShare: 0.6 });
-    expect(projectFinance(items, undefined, [{ amount: 80 }], DEFAULT_CATALOG).balance).toBe(0);
+    expect(total).toBe(100);
+    expect(projectTotal(items, undefined, DEFAULT_CATALOG)).toBe(55);
   });
 });

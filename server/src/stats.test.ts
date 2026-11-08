@@ -21,13 +21,10 @@ const project = (over: Partial<Project>): Project => ({
 });
 
 describe('dashboard statistics', () => {
-  it('revenue by event month, pipeline from drafts, payments by payment date', () => {
+  it('revenue by event month, pipeline from drafts', () => {
     const s = computeStats(
       [
-        project({
-          eventDate: '2026-06-14',
-          payments: [{ id: 'a', date: '2026-02-01', amount: 100, method: 'cash' }],
-        }),
+        project({ eventDate: '2026-06-14' }),
         project({ eventDate: '2026-06-20', createdBy: 'Besa', pricing: { discountPercent: 10 } }),
         project({ eventDate: '2026-07-04', status: 'draft' }),
         project({ eventDate: '2025-06-14' }),
@@ -36,15 +33,18 @@ describe('dashboard statistics', () => {
       2026,
       '2026-06-15',
     );
-    expect(s.months[5]).toEqual({ events: 2, booked: 2, revenue: 285, pipeline: 0, paid: 0 });
+    expect(s.months[5]).toEqual({
+      events: 2,
+      booked: 2,
+      revenue: 285,
+      pipeline: 0,
+      profit: 285, // no costs entered
+    });
     expect(s.months[6]).toMatchObject({ events: 1, booked: 0, pipeline: 150 });
-    expect(s.months[1]!.paid).toBe(100);
     expect(s.totals).toMatchObject({
       booked: 2,
       drafts: 1,
       revenue: 285,
-      paid: 100,
-      outstanding: 185,
       averageValue: 142.5,
     });
     expect(s.totals.conversion).toBeCloseTo(2 / 3);
@@ -53,5 +53,25 @@ describe('dashboard statistics', () => {
     ]);
     expect(s.agents.map((a) => a.name)).toEqual(['Ana', 'Besa']);
     expect(s.upcoming.map((u) => u.eventDate)).toEqual(['2026-06-20', '2026-07-04']);
+  });
+
+  it('profit = revenue − decor cost − other costs, booked events only', () => {
+    const catalog = DEFAULT_CATALOG.map((c) => (c.id === 'stage' ? { ...c, cost: 40 } : c));
+    const s = computeStats(
+      [
+        project({
+          eventDate: '2026-06-14',
+          costs: [{ id: 't', label: 'Transport', amount: 30 }],
+        }),
+        // A draft brings no profit yet.
+        project({ eventDate: '2026-06-20', status: 'draft' }),
+      ],
+      catalog,
+      2026,
+      '2026-01-01',
+    );
+    expect(s.months[5]!.profit).toBe(150 - 40 - 30);
+    expect(s.totals.profit).toBe(80);
+    expect(s.totals.margin).toBeCloseTo(80 / 150);
   });
 });

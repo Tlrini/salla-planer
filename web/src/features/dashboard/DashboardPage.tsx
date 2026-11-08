@@ -13,7 +13,7 @@ interface MonthStats {
   booked: number;
   revenue: number;
   pipeline: number;
-  paid: number;
+  profit: number;
 }
 
 interface Stats {
@@ -24,10 +24,10 @@ interface Stats {
     drafts: number;
     revenue: number;
     pipeline: number;
-    paid: number;
-    outstanding: number;
     conversion: number;
     averageValue: number;
+    profit: number;
+    margin: number;
   };
   topItems: Array<{ type: string; name: string; quantity: number; revenue: number }>;
   agents: Array<{ name: string; booked: number; revenue: number }>;
@@ -38,7 +38,6 @@ interface Stats {
     eventDate: string;
     status: 'draft' | 'konfirmuar' | 'instaluar';
     total: number;
-    paid: number;
   }>;
 }
 
@@ -110,8 +109,6 @@ export function DashboardPage() {
               value={formatEUR(t.revenue)}
               sub={sq.dashboard.bookedEvents(t.booked)}
             />
-            <Kpi label={sq.dashboard.paid} value={formatEUR(t.paid)} />
-            <Kpi label={sq.dashboard.outstanding} value={formatEUR(t.outstanding)} />
             <Kpi
               label={sq.dashboard.pipeline}
               value={formatEUR(t.pipeline)}
@@ -119,6 +116,11 @@ export function DashboardPage() {
             />
             <Kpi label={sq.dashboard.conversion} value={`${Math.round(t.conversion * 100)}%`} />
             <Kpi label={sq.dashboard.average} value={formatEUR(t.averageValue)} />
+            <Kpi
+              label={sq.dashboard.profit}
+              value={formatEUR(t.profit)}
+              sub={sq.dashboard.margin(Math.round(t.margin * 100))}
+            />
           </div>
 
           <section className="dashboard-card">
@@ -133,10 +135,10 @@ export function DashboardPage() {
                   values: stats.months.map((m) => m.revenue),
                 },
                 {
-                  key: 'paid',
-                  label: sq.dashboard.paidShort,
+                  key: 'profit',
+                  label: sq.dashboard.profit,
                   color: 'var(--series-2)',
-                  values: stats.months.map((m) => m.paid),
+                  values: stats.months.map((m) => m.profit),
                 },
               ]}
               format={euroShort}
@@ -164,7 +166,7 @@ export function DashboardPage() {
                       <th>{sq.dashboard.month}</th>
                       <th className="num">{sq.dashboard.events}</th>
                       <th className="num">{sq.dashboard.revenue}</th>
-                      <th className="num">{sq.dashboard.paidShort}</th>
+                      <th className="num">{sq.dashboard.profit}</th>
                       <th className="num">{sq.dashboard.pipeline}</th>
                     </tr>
                   </thead>
@@ -174,7 +176,7 @@ export function DashboardPage() {
                         <td>{sq.calendar.months[i]}</td>
                         <td className="mono num">{m.events}</td>
                         <td className="mono num">{formatEUR(m.revenue)}</td>
-                        <td className="mono num">{formatEUR(m.paid)}</td>
+                        <td className="mono num">{formatEUR(m.profit)}</td>
                         <td className="mono num">{formatEUR(m.pipeline)}</td>
                       </tr>
                     ))}
@@ -259,9 +261,7 @@ export function DashboardPage() {
                             {sq.statuses[u.status]}
                           </span>
                         </span>
-                        <span className="mono small">
-                          {formatEUR(u.paid)} / {formatEUR(u.total)}
-                        </span>
+                        <span className="mono small">{formatEUR(u.total)}</span>
                       </button>
                     </li>
                   ))}

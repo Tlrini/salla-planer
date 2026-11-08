@@ -3,9 +3,10 @@
 {$DOMAIN} {
 	encode zstd gzip
 
-	# Scanned decor uploads (.glb) may be up to 100 MB; leave headroom for the multipart envelope.
+	# In-page scans (video or photos) may be up to 500 MB, scanned .glb files up to 100 MB; leave
+	# headroom for the multipart envelope.
 	request_body {
-		max_size 110MB
+		max_size 520MB
 	}
 
 	# Caddy replaces any client-sent X-Forwarded-For with the real client IP.

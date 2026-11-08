@@ -5,6 +5,7 @@ import { logout } from '../../model/bootstrap';
 import { navigate, type Route } from '../../model/router';
 import { useSession } from '../../model/session';
 import { useTheme } from '../../styles/theme';
+import { NoticeBell } from './NoticeBell';
 
 /** Header with navigation for the list/admin pages (the editor has its own top bar). */
 export function AppShell({ active, children }: { active: Route['name']; children: ReactNode }) {
@@ -12,9 +13,9 @@ export function AppShell({ active, children }: { active: Route['name']; children
   const [theme, toggleTheme] = useTheme();
   const links: Array<{ route: Route; label: string; match: Array<Route['name']> }> = [
     { route: { name: 'projects' }, label: sq.nav.projects, match: ['projects', 'project'] },
-    { route: { name: 'halls' }, label: sq.nav.halls, match: ['halls', 'hall'] },
+    { route: { name: 'halls' }, label: sq.nav.halls, match: ['halls', 'hall', 'scanHall'] },
     { route: { name: 'calendar' }, label: sq.nav.calendar, match: ['calendar'] },
-    { route: { name: 'library' }, label: sq.nav.library, match: ['library'] },
+    { route: { name: 'library' }, label: sq.nav.library, match: ['library', 'scan'] },
   ];
   if (user?.role === 'admin') {
     links.push({ route: { name: 'dashboard' }, label: sq.nav.dashboard, match: ['dashboard'] });
@@ -38,6 +39,7 @@ export function AppShell({ active, children }: { active: Route['name']; children
             </button>
           ))}
         </nav>
+        <NoticeBell />
         <span className="shell-user muted small">{user?.displayName}</span>
         <button
           type="button"
