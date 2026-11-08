@@ -3,7 +3,14 @@ import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { LeaseLost, WorkerApi, type Claim, type Stage } from './api.js';
 import { buildGlb, extractFrames, reconstruct } from './pipeline.js';
-import { failureText, reconstructProgress } from './plan.js';
+import {
+  expectedMinutes,
+  failureText,
+  frameWidthFor,
+  framesFor,
+  reconstructProgress,
+  triangleBudget,
+} from './plan.js';
 
 /**
  * Salla Planner scan worker (Beta 5). Runs on the GPU VM: claims scan jobs from the app, turns
@@ -23,17 +30,23 @@ function num(name: string, fallback: number): number {
   return Number.isFinite(v) && v > 0 ? v : fallback;
 }
 
+const words = (s: string): string[] => s.split(/\s+/).filter(Boolean);
+
 const config = {
   appUrl: required('APP_URL'),
   token: required('SCAN_WORKER_TOKEN'),
   workDir: process.env.WORK_DIR ?? '/work',
   meshroom: process.env.MESHROOM_BATCH ?? '/opt/meshroom/meshroom_batch',
   pipeline: process.env.MESHROOM_PIPELINE ?? 'photogrammetry',
-  params: (process.env.MESHROOM_PARAMS ?? '').split(/\s+/).filter(Boolean),
+  params: words(process.env.MESHROOM_PARAMS ?? ''),
+  // Coarser depth maps are by far the biggest time saver.
+  paramsQuick: words(
+    process.env.MESHROOM_PARAMS_QUICK ??
+      'DepthMap:downscale=4 Meshing:maxPoints=1000000 Texturing:textureSide=2048',
+  ),
   idleMs: num('IDLE_EXIT_MINUTES', 10) * 60_000,
   pollMs: num('POLL_SECONDS', 15) * 1000,
   maxJobMs: num('MAX_JOB_MINUTES', 90) * 60_000,
-  expectedMs: num('EXPECTED_JOB_MINUTES', 20) * 60_000,
   maxTriangles: num('TARGET_TRIANGLES', 150_000),
 };
 
@@ -42,6 +55,9 @@ const HEARTBEAT_MS = 60_000;
 const log = (...parts: unknown[]) => console.log(new Date().toISOString(), ...parts);
 
 async function processJob(api: WorkerApi, job: Claim): Promise<void> {
+  const quality = job.quality ?? 'detailed';
+  const purpose = job.purpose ?? 'decor';
+  const expectedMs = expectedMinutes(quality, purpose) * 60_000;
   const dir = path.join(config.workDir, job.id);
   fs.rmSync(dir, { recursive: true, force: true });
   const inputDir = path.join(dir, 'input');
@@ -63,7 +79,7 @@ async function processJob(api: WorkerApi, job: Claim): Promise<void> {
   const heartbeat = setInterval(() => {
     const p =
       stage === 'reconstruct'
-        ? reconstructProgress(Date.now() - reconstructStart, config.expectedMs)
+        ? reconstructProgress(Date.now() - reconstructStart, expectedMs)
         : progress;
     api
       .progress(job, p, stage)
@@ -87,7 +103,12 @@ async function processJob(api: WorkerApi, job: Claim): Promise<void> {
     if (job.source === 'video') {
       await report(5, 'frames');
       imagesDir = path.join(dir, 'frames');
-      const frames = await extractFrames(path.join(inputDir, job.files[0]!), imagesDir);
+      const frames = await extractFrames(
+        path.join(inputDir, job.files[0]!),
+        imagesDir,
+        framesFor(quality, purpose),
+        frameWidthFor(quality),
+      );
       log(`job ${job.id}: ${frames} frames`);
     }
 
@@ -97,7 +118,7 @@ async function processJob(api: WorkerApi, job: Claim): Promise<void> {
     await reconstruct(imagesDir, outDir, {
       bin: config.meshroom,
       pipeline: config.pipeline,
-      params: config.params,
+      params: quality === 'quick' ? config.paramsQuick : config.params,
       signal: abort.signal,
       onLine: (line) => {
         if (/error|exception/i.test(line)) log(`job ${job.id}: ${line.slice(0, 300)}`);
@@ -107,7 +128,7 @@ async function processJob(api: WorkerApi, job: Claim): Promise<void> {
 
     await report(90, 'optimize');
     const glb = path.join(dir, 'scan.glb');
-    const { triangles } = await buildGlb(outDir, glb, config.maxTriangles);
+    const { triangles } = await buildGlb(outDir, glb, triangleBudget(quality, config.maxTriangles));
 
     await report(96, 'upload');
     await api.result(job, glb);

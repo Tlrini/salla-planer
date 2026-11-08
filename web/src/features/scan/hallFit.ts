@@ -21,6 +21,15 @@ export function hallFromScan(
   return { scale, width: r2(size.x * scale), length: r2(size.z * scale), height: r2(realHeight) };
 }
 
+/** Where the scaled scan goes so that its lowest corner (`min`, own units) lands on the origin. */
+export function shellOffset(
+  min: { x: number; y: number; z: number },
+  scale: number,
+): { x: number; y: number; z: number } {
+  // `+ 0` turns a -0 into 0.
+  return { x: -min.x * scale + 0, y: -min.y * scale + 0, z: -min.z * scale + 0 };
+}
+
 /** Whether these dimensions fit the data model (a wrongly turned scan comes out huge or flat). */
 export const validHallSize = (width: number, length: number): boolean =>
   width >= 1 && length >= 1 && width <= MAX_HALL_SIDE && length <= MAX_HALL_SIDE;

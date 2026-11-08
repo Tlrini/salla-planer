@@ -446,6 +446,15 @@ Wall and ceiling decor (2026-11-08): `Item.mount` ('wall' | 'ceiling', missing =
 `mountPatch` in `shared/src/geometry.ts` (wall items face the room, never rotate, never block
 floor/walking); 3D drag onto walls/ceiling via `roomSurfaceHit` (`viewer3d/picking.ts`) and drop
 from the catalog into 3D (`Drop3D` in `viewer3d/Edit3D.tsx`).
+Scanning upgrades (2026-11-08): a library scan can become the model of a built-in chair or table
+(`POST /api/catalog/:id/model-from-library`, admin; `server/src/modelOptimize.ts` makes a lighter
+copy, 4 000 triangles per chair and 30 000 per table, with @gltf-transform/core,
+@gltf-transform/functions and meshoptimizer, now also server dependencies); automatic chairs are
+then drawn with `GlbInstances`. `ScanJob.quality` ('quick' | 'detailed', migration 10; worker
+presets in `worker/src/plan.ts`, times are estimates until run on a real GPU VM). `Hall.kind`
+('salle' | 'tende' | 'skan'): `viewer3d/TentShell.tsx` draws a frame tent (poles are thin `column`
+structure items from `tentPoles`, kept in step by `updateHall`), `viewer3d/ScanShell.tsx` draws
+`Hall.shell`, the scan kept by `finish-hall` as `uploads/models/hall-*.glb`; share links serve it.
 Also added (2026-11-06): editing in 3D (`viewer3d/Edit3D.tsx`, pure picking in
 `viewer3d/picking.ts`, drag preview in `viewer3d/drag3d.ts`); whole-hall scans
 (`scan_jobs.purpose` – migration 8, `POST /api/scans/:id/finish-hall`,

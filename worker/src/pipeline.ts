@@ -63,10 +63,15 @@ async function videoDuration(file: string): Promise<number | null> {
   }
 }
 
-/** Frames of a video as JPEGs in `outDir` (at most MAX_FRAMES, spread over the whole video). */
-export async function extractFrames(video: string, outDir: string): Promise<number> {
+/** Frames of a video as JPEGs in `outDir` (at most `maxFrames`, spread over the whole video). */
+export async function extractFrames(
+  video: string,
+  outDir: string,
+  maxFrames = MAX_FRAMES,
+  width = 1920,
+): Promise<number> {
   fs.mkdirSync(outDir, { recursive: true });
-  const fps = framesPerSecond(await videoDuration(video));
+  const fps = framesPerSecond(await videoDuration(video), maxFrames);
   await run('ffmpeg', [
     '-hide_banner',
     '-loglevel',
@@ -74,7 +79,7 @@ export async function extractFrames(video: string, outDir: string): Promise<numb
     '-i',
     video,
     '-vf',
-    `fps=${fps},scale='min(1920,iw)':-2`,
+    `fps=${fps},scale='min(${width},iw)':-2`,
     '-q:v',
     '2',
     path.join(outDir, 'frame_%05d.jpg'),
@@ -83,7 +88,7 @@ export async function extractFrames(video: string, outDir: string): Promise<numb
     .readdirSync(outDir)
     .filter((f) => f.endsWith('.jpg'))
     .sort();
-  const keep = new Set(pickEvenly(frames, MAX_FRAMES));
+  const keep = new Set(pickEvenly(frames, maxFrames));
   for (const f of frames) if (!keep.has(f)) fs.rmSync(path.join(outDir, f));
   return keep.size;
 }

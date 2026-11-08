@@ -10,6 +10,8 @@ export interface Claim {
   source: 'video' | 'photos';
   /** A decoration or a whole hall; both go through the same photogrammetry. */
   purpose?: 'decor' | 'hall';
+  /** Missing from servers older than the quick mode: treated as detailed. */
+  quality?: 'quick' | 'detailed';
   files: string[];
 }
 

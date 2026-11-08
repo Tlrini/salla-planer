@@ -12,6 +12,7 @@ import {
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { BUILDERS, GenericBox } from './builders';
 import { ChairInstances } from './ChairInstances';
+import { autoChairItems } from './chairs';
 import { GlbInstances, type PlacedModel } from './GlbInstances';
 import { Hall3D } from './Hall3D';
 import { Lighting } from './Lighting';
@@ -81,6 +82,13 @@ export function HallScene({ project, catalog, evening, catalogVersion, waitForMo
         procedural.push({ item, cat, baseY });
       }
     }
+    // A scanned chair model also draws the automatic chairs around the tables.
+    const chair = catalog.get('chair');
+    if (chair?.modelFile) {
+      const entry = models.get(chair.id) ?? { cat: chair, placed: [] };
+      for (const item of autoChairItems(items, catalog)) entry.placed.push({ item, baseY: 0 });
+      if (entry.placed.length) models.set(chair.id, entry);
+    }
     return { procedural, models: [...models.values()] };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion marks catalog changes
   }, [items, catalog, catalogVersion, hall.height]);
@@ -88,22 +96,27 @@ export function HallScene({ project, catalog, evening, catalogVersion, waitForMo
   return (
     <>
       <Lighting hall={hall} items={items} evening={evening} waitForEnv={waitForModels} />
-      <Hall3D hall={hall} wait={waitForModels} />
+      <Hall3D hall={hall} evening={evening} wait={waitForModels} />
       {procedural.map(({ item, cat, baseY }) => (
         <ItemMesh key={item.id} item={item} cat={cat} hall={hall} evening={evening} baseY={baseY} />
       ))}
       {models.map(({ cat, placed }) => {
         // While the .glb loads, or if it is broken, show the procedural model instead.
-        const fallback = placed.map(({ item, baseY }) => (
-          <ItemMesh
-            key={item.id}
-            item={item}
-            cat={cat}
-            hall={hall}
-            evening={evening}
-            baseY={baseY}
-          />
-        ));
+        const fallback =
+          cat.id === 'chair' ? (
+            <ChairInstances items={items} catalog={catalog} ignoreModel />
+          ) : (
+            placed.map(({ item, baseY }) => (
+              <ItemMesh
+                key={item.id}
+                item={item}
+                cat={cat}
+                hall={hall}
+                evening={evening}
+                baseY={baseY}
+              />
+            ))
+          );
         return (
           <ErrorBoundary key={cat.id} fallback={fallback} resetKey={cat.modelFile}>
             {waitForModels ? (

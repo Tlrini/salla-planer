@@ -7,7 +7,9 @@ import {
   catalogById,
   clampToHall,
   findFreeSpot,
+  isTentPole,
   mountPatch,
+  tentPoles,
   normalizeAngle,
   snap,
   type CatalogItem,
@@ -272,14 +274,21 @@ export const useEditor = create<EditorState>()(
       },
 
       updateHall: (patch) => {
-        const { project } = get();
-        set({
-          project: {
-            ...project,
-            hall: { ...project.hall, ...patch },
-            updatedAt: new Date().toISOString(),
-          },
-        });
+        const { project, meta } = get();
+        const hall = { ...project.hall, ...patch };
+        const isTent = hall.kind === 'tende';
+        const wasTent = project.hall.kind === 'tende';
+        const resized = patch.width || patch.length || patch.height;
+        let items = project.items;
+        if (isTent !== wasTent || (isTent && resized)) {
+          // The tent's poles follow its size. In the hall editor the items are the structure.
+          const inTemplate = meta?.kind === 'hall';
+          const base = inTemplate ? project.items : hall.structure;
+          const next = [...base.filter((i) => !isTentPole(i)), ...(isTent ? tentPoles(hall) : [])];
+          if (inTemplate) items = next;
+          else hall.structure = next;
+        }
+        set({ project: { ...project, hall, items, updatedAt: new Date().toISOString() } });
       },
 
       updateProject: (patch) => {

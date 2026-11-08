@@ -3,6 +3,7 @@ import { Camera, RotateCcw, Ruler, Scissors, Trash } from 'lucide-react';
 import {
   formatDateTime,
   isScanActive,
+  scanMinutesLeft,
   type CatalogItem,
   type ScanJob,
   type ScanList,
@@ -136,6 +137,7 @@ export function ScanJobs({
                 <span className="library-name">{j.name}</span>
                 <span className="muted small">
                   {j.source === 'video' ? sq.scan.sourceVideo : sq.scan.sourcePhotos(j.fileCount)} ·{' '}
+                  {sq.scan.qualityOption[j.quality]} ·{' '}
                   {sq.scan.by(j.createdBy, formatDateTime(j.createdAt))}
                 </span>
                 {j.status === 'processing' && (
@@ -143,6 +145,7 @@ export function ScanJobs({
                     <progress className="scan-progress" max={100} value={j.progress} />
                     <span className="muted small mono">
                       {j.progress}% {j.stage ? `· ${sq.scan.stage[j.stage]}` : ''}
+                      {` · ${sq.scan.minutesLeft(scanMinutesLeft(j) ?? 1)}`}
                     </span>
                   </>
                 )}

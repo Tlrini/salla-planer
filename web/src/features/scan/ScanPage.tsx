@@ -6,6 +6,7 @@ import {
   type ScanJob,
   type ScanList,
   type ScanPurpose,
+  type ScanQuality,
 } from '@salla/shared';
 import { api, ApiError } from '../../api/client';
 import { sq } from '../../i18n/sq';
@@ -50,6 +51,12 @@ const problemText = (p: Problem): string =>
       : sq.scan[p];
 
 /** Texts that differ between scanning a decoration and scanning a whole hall. */
+/** The time range shown to the agent, per purpose and quality (estimates). */
+const TIME_RANGE: Record<ScanPurpose, Record<ScanQuality, string>> = {
+  decor: { quick: '10–15', detailed: '20–30' },
+  hall: { quick: '15–20', detailed: '30–40' },
+};
+
 const TEXT: Record<
   ScanPurpose,
   {
@@ -59,7 +66,7 @@ const TEXT: Record<
     tips: readonly string[];
     name: string;
     placeholder: string;
-    sent: string;
+    sent: (range: string) => string;
     done: string;
     home: Route;
   }
@@ -96,6 +103,7 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
   const text = TEXT[purpose];
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [name, setName] = useState('');
+  const [quality, setQuality] = useState<ScanQuality>('quick');
   const [phase, setPhase] = useState<Phase>({ kind: 'intro' });
   const [problem, setProblem] = useState<Problem | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
@@ -123,6 +131,7 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
     const form = new FormData();
     form.append('name', name.trim());
     form.append('purpose', purpose);
+    form.append('quality', quality);
     for (const u of uploads) form.append('file', u.blob, u.filename);
     setPhase({ kind: 'uploading', progress: 0 });
     try {
@@ -190,6 +199,24 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
                   placeholder={text.placeholder}
                   onChange={(e) => setName(e.target.value)}
                 />
+              </div>
+              <div className="field">
+                <span className="field-label">{sq.scan.quality}</span>
+                <div className="segmented" role="group" aria-label={sq.scan.quality}>
+                  {(['quick', 'detailed'] as const).map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      aria-pressed={quality === q}
+                      onClick={() => setQuality(q)}
+                    >
+                      {sq.scan.qualityOption[q]}
+                    </button>
+                  ))}
+                </div>
+                <p className="muted small" data-testid="scan-quality-hint">
+                  {sq.scan.qualityHint[quality](TIME_RANGE[purpose][quality])}
+                </p>
               </div>
               <div className="scan-actions">
                 <button
@@ -308,7 +335,7 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
           {phase.kind === 'sent' && (
             <>
               <p className="notice" role="status">
-                {text.sent}
+                {text.sent(TIME_RANGE[purpose][quality])}
               </p>
               <div className="scan-actions">
                 <button

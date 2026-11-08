@@ -174,4 +174,10 @@ export const MIGRATIONS: ReadonlyArray<{ id: number; name: string; sql: string }
       CREATE INDEX projects_deleted ON projects(deleted_at);
     `,
   },
+  {
+    id: 10,
+    name: 'scan_jobs_quality',
+    // Quick or detailed reconstruction; scans from before this had the full pipeline.
+    sql: `ALTER TABLE scan_jobs ADD COLUMN quality TEXT NOT NULL DEFAULT 'detailed';`,
+  },
 ];

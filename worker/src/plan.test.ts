@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   failureText,
+  expectedMinutes,
+  frameWidthFor,
+  framesFor,
+  triangleBudget,
   framesPerSecond,
   jpegName,
   pickEvenly,
@@ -67,5 +71,21 @@ describe('scan worker plan', () => {
     expect(failureText(new Error('meshroom\nexited with 1'))).toBe('meshroom exited with 1');
     expect(failureText('x'.repeat(900))).toHaveLength(480);
     expect(failureText('')).toBe('unknown error');
+  });
+});
+
+describe('scan quality', () => {
+  it('uses fewer, smaller frames for a quick scan', () => {
+    expect(framesFor('quick', 'decor')).toBe(80);
+    expect(framesFor('quick', 'hall')).toBe(120);
+    expect(framesFor('detailed', 'decor')).toBe(200);
+    expect(frameWidthFor('quick')).toBe(1280);
+    expect(frameWidthFor('detailed')).toBe(1920);
+  });
+  it('keeps less geometry and expects less time', () => {
+    expect(triangleBudget('quick', 150_000)).toBe(90_000);
+    expect(triangleBudget('detailed', 150_000)).toBe(150_000);
+    expect(expectedMinutes('quick', 'decor')).toBeLessThan(expectedMinutes('detailed', 'decor'));
+    expect(expectedMinutes('quick', 'hall')).toBeLessThan(expectedMinutes('detailed', 'hall'));
   });
 });

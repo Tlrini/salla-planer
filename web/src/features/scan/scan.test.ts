@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { photoCountProblem, pickRecorderMime, stepAt, videoExtension } from './capture';
 import { cropBounds, FULL_CROP, keptTriangles, MIN_CROP_SPAN, setCropEnd } from './crop';
-import { hallFromScan, planImageSize, validHallSize } from './hallFit';
+import { hallFromScan, planImageSize, shellOffset, validHallSize } from './hallFit';
 
 describe('hall from a scan', () => {
   it('scales the scan by the real ceiling height', () => {
@@ -87,5 +87,17 @@ describe('crop', () => {
     // Indexed: the same two triangles, listed B first.
     expect(keptTriangles(positions, [3, 4, 5, 0, 1, 2], box)).toEqual([0, 1, 2]);
     expect(keptTriangles(positions, [3, 4, 5], box)).toEqual([]);
+  });
+});
+
+describe('scanned hall as the 3D shell', () => {
+  it('puts the lowest corner of the scaled scan on the origin', () => {
+    const min = { x: -1200, y: 10, z: 0 };
+    const scale = 0.01;
+    const offset = shellOffset(min, scale);
+    expect(offset).toEqual({ x: 12, y: -0.1, z: 0 });
+    expect(min.x * scale + offset.x).toBeCloseTo(0);
+    expect(min.y * scale + offset.y).toBeCloseTo(0);
+    expect(min.z * scale + offset.z).toBeCloseTo(0);
   });
 });

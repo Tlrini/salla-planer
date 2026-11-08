@@ -5,6 +5,28 @@ export const MAX_FRAMES = 200;
 /** Frames per second taken from a video when its length is unknown or short. */
 export const MAX_FPS = 2;
 
+export type ScanQuality = 'quick' | 'detailed';
+export type ScanPurpose = 'decor' | 'hall';
+
+/** Frames that go into photogrammetry: a whole hall needs more than one decoration. */
+export function framesFor(quality: ScanQuality, purpose: ScanPurpose): number {
+  if (quality === 'detailed') return MAX_FRAMES;
+  return purpose === 'hall' ? 120 : 80;
+}
+
+/** Width the frames are scaled down to. */
+export const frameWidthFor = (quality: ScanQuality): number => (quality === 'quick' ? 1280 : 1920);
+
+/** Triangles of the final model: a quick scan keeps 60 % of the detailed budget. */
+export const triangleBudget = (quality: ScanQuality, detailed: number): number =>
+  quality === 'quick' ? Math.round(detailed * 0.6) : detailed;
+
+/** Usual minutes per job, for the progress bar. Mirrors scanExpectedMinutes in shared. */
+export function expectedMinutes(quality: ScanQuality, purpose: ScanPurpose): number {
+  if (purpose === 'hall') return quality === 'quick' ? 18 : 35;
+  return quality === 'quick' ? 12 : 25;
+}
+
 /**
  * Frame rate for ffmpeg so a video gives about MAX_FRAMES frames. Unknown durations (browser
  * WebM recordings often have none) use MAX_FPS; pickEvenly trims the result afterwards.

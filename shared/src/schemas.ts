@@ -176,6 +176,24 @@ export const Underlay = z.object({
 });
 export type Underlay = z.infer<typeof Underlay>;
 
+/** The kind of room drawn in 3D; the plan is always the width × length rectangle. */
+export const HallKind = z.enum(['salle', 'tende', 'skan']);
+export type HallKind = z.infer<typeof HallKind>;
+
+/** A scanned room used as the hall's 3D shell, and how to place it (see scan/HallScanDialog). */
+export const HallShell = z.object({
+  url: z.string().min(1).max(300),
+  /** Upright quarter turns (x, z) and the turn that lines the walls up with the grid (yaw), deg. */
+  turn: z.object({ x: z.number().finite(), z: z.number().finite(), yaw: z.number().finite() }),
+  scale: z.number().positive().finite(),
+  offset: z.object({ x: z.number().finite(), y: z.number().finite(), z: z.number().finite() }),
+  /** Show the other side of the faces (scans whose faces came out inside-out). */
+  flip: z.boolean().optional(),
+  /** Show the scanned floor instead of the hall's floor material. */
+  scanFloor: z.boolean().optional(),
+});
+export type HallShell = z.infer<typeof HallShell>;
+
 export const Hall = z.object({
   name: z.string().min(1).max(120),
   width: z.number().positive().max(500),
@@ -186,6 +204,11 @@ export const Hall = z.object({
   wallColor: hexColor,
   structure: z.array(Item),
   underlay: Underlay.optional(),
+  /** Missing = 'salle', a normal room. */
+  kind: HallKind.optional(),
+  shell: HallShell.optional(),
+  /** Tent options; `openSides` rolls up the fabric walls. */
+  tent: z.object({ openSides: z.boolean() }).optional(),
 });
 export type Hall = z.infer<typeof Hall>;
 

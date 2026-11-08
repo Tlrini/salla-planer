@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Box, RotateCcw, Search, SlidersHorizontal, Trash, Upload } from 'lucide-react';
+import { Armchair, Box, RotateCcw, Search, SlidersHorizontal, Trash, Upload } from 'lucide-react';
 import { formatDecimal, formatEUR, type CatalogCategory, type CatalogItem } from '@salla/shared';
 import { api, ApiError } from '../../api/client';
 import { sq } from '../../i18n/sq';
@@ -9,6 +9,7 @@ import { catalog, useCatalogVersion } from '../../model/store';
 import { ConfirmDialog } from '../editor/ConfirmDialog';
 import { ScanJobs } from '../scan/ScanJobs';
 import { AppShell } from '../shell/AppShell';
+import { AssignModelDialog } from './AssignModelDialog';
 import { ModelSetup } from './ModelSetup';
 
 const CATEGORIES: CatalogCategory[] = ['floral', 'stage', 'lighting', 'tables', 'other'];
@@ -30,6 +31,8 @@ export function LibraryPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [toDelete, setToDelete] = useState<CatalogItem | null>(null);
+  const [assigning, setAssigning] = useState<CatalogItem | null>(null);
+  const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [notice, setNotice] = useState<'uploadError' | 'archivedNotice' | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -119,6 +122,11 @@ export function LibraryPage() {
           {sq.library[notice]}
         </p>
       )}
+      {assignedTo && (
+        <p className="notice" role="status">
+          {sq.library.assigned(assignedTo)}
+        </p>
+      )}
       <ScanJobs purpose="decor" onDecorCreated={setEditing} />
 
       <div className="filters">
@@ -192,6 +200,17 @@ export function LibraryPage() {
                 >
                   <SlidersHorizontal size={18} />
                 </button>
+                {user?.role === 'admin' && c.active && c.modelFile && !c.draft && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label={`${sq.library.useAsModel}: ${c.name}`}
+                    title={sq.library.useAsModel}
+                    onClick={() => setAssigning(c)}
+                  >
+                    <Armchair size={18} />
+                  </button>
+                )}
                 {!c.active ? (
                   <button
                     type="button"
@@ -222,6 +241,14 @@ export function LibraryPage() {
       )}
 
       <ModelSetup item={editing} onClose={() => setEditing(null)} />
+      <AssignModelDialog
+        scan={assigning}
+        onClose={() => setAssigning(null)}
+        onAssigned={(target) => {
+          setAssigning(null);
+          setAssignedTo(target.name);
+        }}
+      />
       <ConfirmDialog
         open={!!toDelete}
         title={sq.library.deleteTitle}

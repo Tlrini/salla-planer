@@ -22,6 +22,10 @@ export type ScanSource = z.infer<typeof ScanSource>;
 export const ScanPurpose = z.enum(['decor', 'hall']);
 export type ScanPurpose = z.infer<typeof ScanPurpose>;
 
+/** Quick: fewer frames and a lighter reconstruction. Detailed: the full pipeline. */
+export const ScanQuality = z.enum(['quick', 'detailed']);
+export type ScanQuality = z.infer<typeof ScanQuality>;
+
 /** What the worker is doing right now (shown next to the progress). */
 export const ScanStage = z.enum(['download', 'frames', 'reconstruct', 'optimize', 'upload']);
 export type ScanStage = z.infer<typeof ScanStage>;
@@ -31,6 +35,7 @@ export const ScanJob = z.object({
   name: z.string(),
   purpose: ScanPurpose,
   source: ScanSource,
+  quality: ScanQuality,
   fileCount: z.number().int().nonnegative(),
   status: ScanStatus,
   /** 0–100 while processing. */
@@ -63,6 +68,7 @@ export const ScanClaim = z.object({
   lease: z.string(),
   source: ScanSource,
   purpose: ScanPurpose,
+  quality: ScanQuality,
   files: z.array(z.string()),
 });
 export type ScanClaim = z.infer<typeof ScanClaim>;
@@ -113,6 +119,25 @@ export function isClaimable(
 ): boolean {
   if (job.status === 'queued') return true;
   return job.status === 'processing' && (job.heartbeatAt ?? 0) <= now - SCAN_STALE_MS;
+}
+
+/** Usual processing time in minutes on the GPU VM (estimates, not measured yet). */
+const EXPECTED_MINUTES: Record<ScanPurpose, Record<ScanQuality, number>> = {
+  decor: { quick: 12, detailed: 25 },
+  hall: { quick: 18, detailed: 35 },
+};
+
+export const scanExpectedMinutes = (quality: ScanQuality, purpose: ScanPurpose): number =>
+  EXPECTED_MINUTES[purpose][quality];
+
+/** About how many minutes a waiting or running job still needs; null when it isn't running. */
+export function scanMinutesLeft(
+  job: Pick<ScanJob, 'quality' | 'purpose' | 'status' | 'progress'>,
+): number | null {
+  if (!isScanActive(job.status)) return null;
+  const total = scanExpectedMinutes(job.quality, job.purpose);
+  if (job.status === 'queued') return total;
+  return Math.max(1, Math.ceil(total * (1 - job.progress / 100)));
 }
 
 /** Jobs an agent sees as still running (the list keeps polling while any exist). */

@@ -12,10 +12,13 @@
     "@fastify/cookie": "11.1.5",
     "@fastify/multipart": "10.1.7",
     "@fastify/static": "10.1.10",
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
     "@salla/shared": "0.1.0",
     "bcrypt": "6.0.0",
     "better-sqlite3": "13.0.3",
     "fastify": "5.12.8",
+    "meshoptimizer": "1.1.1",
     "nanoid": "5.1.6"
   },
   "devDependencies": {

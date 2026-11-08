@@ -109,6 +109,13 @@ export const sq = {
     },
     floorColor: 'Ngjyra e dyshemesë',
     wallColor: 'Ngjyra e mureve',
+    kind: 'Lloji i sallës',
+    kinds: { salle: 'Sallë', tende: 'Tendë', skan: 'Nga skanimi' },
+    tentSides: 'Anët e tendës',
+    tentClosed: 'Të mbyllura',
+    tentOpen: 'Të hapura',
+    shellFlip: 'Kthe anët e skanimit',
+    shellFloor: 'Dyshemeja e skanuar',
   },
   project: {
     title: 'Projekti',
@@ -388,6 +395,14 @@ export const sq = {
     modelError:
       'Modeli nuk mund të hapet. Provoni një eksport tjetër .glb nga aplikacioni i skanimit.',
     previewHint: 'Tërhiqni për ta parë nga të gjitha anët.',
+    useAsModel: 'Përdore si model për…',
+    assignTitle: (name: string) => `Përdor “${name}” si model`,
+    assignBody:
+      'Zgjidhni çfarë është ky skanim. Në të gjitha projektet kjo karrige ose tavolinë do të shfaqet në 3D me modelin tuaj të skanuar. Modeli thjeshtohet automatikisht që pamja 3D të mbetet e shpejtë.',
+    assigning: 'Duke përpunuar…',
+    hasModel: 'ka model',
+    assigned: (name: string) => `U vendos si model 3D për “${name}”.`,
+    assignError: 'Modeli nuk mund të përpunohet. Provoni një eksport tjetër .glb.',
   },
   scan: {
     section: 'Skanimet me kamerë',
@@ -397,8 +412,7 @@ export const sq = {
     empty: 'Nuk ka skanime në pritje.',
     pageTitle: 'Skano një dekor',
     back: 'Kthehu te biblioteka',
-    intro:
-      'Filmoni dekorin duke ecur ngadalë rreth tij. Serveri e kthen videon në model 3D; zakonisht zgjat 20–30 minuta.',
+    intro: 'Filmoni dekorin duke ecur ngadalë rreth tij. Serveri e kthen videon në model 3D.',
     tipsTitle: 'Për një skanim të mirë',
     tips: [
       'Dritë e mirë dhe e njëtrajtshme, pa diell direkt dhe pa hije të forta.',
@@ -427,7 +441,15 @@ export const sq = {
     tooFewPhotos: (min: number) => `Duhen të paktën ${min} foto nga të gjitha anët.`,
     tooManyPhotos: (max: number) => `Lejohen deri në ${max} foto.`,
     uploading: (p: number) => `Duke dërguar… ${p}%`,
-    sent: 'U dërgua. Modeli do të jetë gati për rreth 20–30 minuta; do ta gjeni te Biblioteka, te “Skanimet me kamerë”.',
+    sent: (range: string) =>
+      `U dërgua. Modeli do të jetë gati për rreth ${range} minuta; do ta gjeni te Biblioteka, te “Skanimet me kamerë”.`,
+    quality: 'Cilësia e skanimit',
+    qualityOption: { quick: 'Shpejt', detailed: 'Me detaje' },
+    qualityHint: {
+      quick: (range: string) => `Rreth ${range} minuta. Mjafton për shumicën e dekoreve.`,
+      detailed: (range: string) => `Rreth ${range} minuta. Më shumë detaje, zgjat më tepër.`,
+    },
+    minutesLeft: (n: number) => `edhe rreth ${n} min`,
     sendError: 'Dërgimi dështoi. Kontrolloni lidhjen dhe provoni përsëri.',
     tooLarge: 'Skedari është shumë i madh (deri në 500 MB).',
     nameMissing: 'Shkruani emrin e dekorit.',
@@ -489,11 +511,14 @@ export const sq = {
     stepWalls: 'Ecni ngadalë përgjatë mureve, me dyshemenë në kuadër.',
     stepCorners: 'Filmoni cepat dhe kolonat nga afër.',
     stepMiddle: 'Kaloni nga mesi i sallës, pastaj ndaloni.',
-    hallSent:
-      'U dërgua. Plani do të jetë gati për rreth 30–40 minuta; do ta gjeni te Sallat, te “Skanimet e sallave”.',
+    hallSent: (range: string) =>
+      `U dërgua. Plani do të jetë gati për rreth ${range} minuta; do ta gjeni te Sallat, te “Skanimet e sallave”.`,
     toHalls: 'Shko te sallat',
     hallFinish: 'Krijo sallën',
     hallTitle: 'Plani nga skanimi',
+    hallKind: 'Çfarë është skanuar',
+    hallKinds: { hall: 'Sallë', tent: 'Tendë', other: 'Tjetër' },
+    hallKindHint: 'Në pamjen 3D shfaqet vetë skanimi juaj, me muret dhe tavanin realë.',
     hallHint:
       'Ngrijeni modelin derisa dyshemeja të duket nga lart, rrotullojeni derisa muret të jenë paralel me rrjetin, pastaj shkruani lartësinë reale të tavanit.',
     hallTurn: 'Rrotullo muret',

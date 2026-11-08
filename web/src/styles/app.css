@@ -2827,3 +2827,17 @@ a.icon-btn {
   width: 100%;
   accent-color: var(--accent);
 }
+
+/* Library: pick the chair / table a scan becomes the model of. */
+.assign-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.assign-list .btn {
+  width: 100%;
+  justify-content: space-between;
+  min-height: 44px;
+}

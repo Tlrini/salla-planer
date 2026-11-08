@@ -112,6 +112,10 @@ export const CatalogUpdate = CatalogItem.omit({ id: true, modelFile: true }).par
 });
 export type CatalogUpdate = z.infer<typeof CatalogUpdate>;
 
+/** POST /api/catalog/:id/model-from-library: draw a built-in chair/table with a scanned model. */
+export const ModelFromLibrary = z.object({ libraryId: z.string().min(1).max(64) });
+export type ModelFromLibrary = z.infer<typeof ModelFromLibrary>;
+
 /** Max upload size for .glb models (admin model for a built-in type). */
 export const MAX_MODEL_BYTES = 20 * 1024 * 1024;
 /** Max upload size for a scanned decor (.glb from a phone scan app). */

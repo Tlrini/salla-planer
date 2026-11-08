@@ -61,11 +61,17 @@ function ChairGroup({
 export function ChairInstances({
   items,
   catalog,
+  ignoreModel = false,
 }: {
   items: readonly Item[];
   catalog: CatalogMap;
+  /** Draw the procedural chairs even though a scanned chair model is set. */
+  ignoreModel?: boolean;
 }) {
-  const groups = useMemo(() => groupChairs(collectChairs(items, catalog)), [items, catalog]);
+  const groups = useMemo(
+    () => groupChairs(collectChairs(items, catalog, ignoreModel)),
+    [items, catalog, ignoreModel],
+  );
   return (
     <>
       {[...groups.entries()].map(([key, poses]) => {

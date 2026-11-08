@@ -1,6 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { Suspense, useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { WINDOW_SILL, type Hall, type Item } from '@salla/shared';
+import { ErrorBoundary } from '../../components/ErrorBoundary';
+import { ScanShell } from './ScanShell';
+import { TentShell } from './TentShell';
 import { geo, mat } from './resources';
 import { FLOOR_TILE_METERS, floorTextures } from './textures';
 import { tiled, tintToward, usePbr, type PbrName } from './pbrTextures';
@@ -115,13 +118,26 @@ function StructureMesh({ item, hall }: { item: Item; hall: Hall }) {
   const g = geo();
   const rot = (-item.rotation * Math.PI) / 180;
   if (item.type === 'column') {
+    const height = item.height ?? hall.height;
+    // Thin columns are the round aluminium poles of a tent.
+    if (Math.max(item.width, item.depth) <= 0.25) {
+      return (
+        <mesh
+          geometry={g.cylinderLow}
+          material={mat('metal', item.color)}
+          position={[item.x, height / 2, item.y]}
+          scale={[item.width, height, item.depth]}
+          castShadow
+        />
+      );
+    }
     return (
       <mesh
         geometry={g.box}
         material={mat('matte', item.color)}
-        position={[item.x, hall.height / 2, item.y]}
+        position={[item.x, height / 2, item.y]}
         rotation={[0, rot, 0]}
-        scale={[item.width, hall.height, item.depth]}
+        scale={[item.width, height, item.depth]}
         castShadow
         receiveShadow
       />
@@ -174,7 +190,15 @@ function StructureMesh({ item, hall }: { item: Item; hall: Hall }) {
 
 /** Floor, inward-facing walls (dollhouse effect), ceiling and structure items. */
 /** `wait`: off-screen renders wait for the photo textures instead of the procedural stand-ins. */
-export function Hall3D({ hall, wait = false }: { hall: Hall; wait?: boolean }) {
+export function Hall3D({
+  hall,
+  evening = false,
+  wait = false,
+}: {
+  hall: Hall;
+  evening?: boolean;
+  wait?: boolean;
+}) {
   const g = geo();
   const floor = useFloorMaterial(hall, wait);
   const W = hall.width;
@@ -185,16 +209,8 @@ export function Hall3D({ hall, wait = false }: { hall: Hall; wait?: boolean }) {
   const longWall = usePlaster(hall.wallColor, W, H, wait) ?? plain;
   const shortWall = usePlaster(hall.wallColor, L, H, wait) ?? plain;
   const ceiling = usePlaster('#FAF7F2', W, L, wait) ?? mat('matte', '#FAF7F2');
-  return (
-    <group>
-      <mesh
-        geometry={g.plane}
-        material={floor}
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[W / 2, 0, L / 2]}
-        scale={[W, L, 1]}
-        receiveShadow
-      />
+  const box = (
+    <>
       <mesh
         geometry={g.plane}
         material={longWall}
@@ -233,6 +249,40 @@ export function Hall3D({ hall, wait = false }: { hall: Hall; wait?: boolean }) {
         rotation={[Math.PI / 2, 0, 0]}
         scale={[W, L, 1]}
       />
+    </>
+  );
+  const kind = hall.kind ?? 'salle';
+  let shell = box;
+  if (kind === 'tende') {
+    shell = <TentShell hall={hall} evening={evening} wait={wait} />;
+  } else if (kind === 'skan' && hall.shell) {
+    // A missing or broken scan (or one still loading) shows the plain room.
+    shell = (
+      <ErrorBoundary fallback={box} resetKey={hall.shell.url}>
+        {wait ? (
+          <ScanShell shell={hall.shell} />
+        ) : (
+          <Suspense fallback={box}>
+            <ScanShell shell={hall.shell} />
+          </Suspense>
+        )}
+      </ErrorBoundary>
+    );
+  }
+  const scanFloor = kind === 'skan' && !!hall.shell?.scanFloor;
+  return (
+    <group>
+      {!scanFloor && (
+        <mesh
+          geometry={g.plane}
+          material={floor}
+          rotation={[-Math.PI / 2, 0, 0]}
+          position={[W / 2, 0, L / 2]}
+          scale={[W, L, 1]}
+          receiveShadow
+        />
+      )}
+      {shell}
       {hall.structure.map((s) => (
         <StructureMesh key={s.id} item={s} hall={hall} />
       ))}

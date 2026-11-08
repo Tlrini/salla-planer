@@ -390,6 +390,68 @@ export function nearestWall(
   return { wall, distance };
 }
 
+// ----- tents --------------------------------------------------------------------------
+
+/** Usual pitch of a frame tent's roof (degrees) and spacing of its poles and bays (m). */
+export const TENT_PITCH = 20;
+export const TENT_BAY = 5;
+const POLE_SIZE = 0.12;
+const POLE_INSET = 0.08;
+const POLE_COLOR = '#C9CDD2';
+
+/** The roof of a tent over the hall: the ridge runs along the longer side. */
+export function tentRoof(hall: Pick<Hall, 'width' | 'length'>): {
+  alongX: boolean;
+  len: number;
+  span: number;
+  rise: number;
+} {
+  const alongX = hall.width >= hall.length;
+  const len = alongX ? hall.width : hall.length;
+  const span = alongX ? hall.length : hall.width;
+  return { alongX, len, span, rise: round6((span / 2) * Math.tan((TENT_PITCH * Math.PI) / 180)) };
+}
+
+/** Evenly spaced stops from 0 to `size`, at most TENT_BAY apart, both ends included. */
+function bayStops(size: number): number[] {
+  const bays = Math.max(1, Math.ceil(size / TENT_BAY));
+  return Array.from({ length: bays + 1 }, (_, i) => round6((i * size) / bays));
+}
+
+const TENT_POLE_PREFIX = 'tent-pole-';
+export const isTentPole = (i: Pick<Item, 'id'>): boolean => i.id.startsWith(TENT_POLE_PREFIX);
+
+/**
+ * The aluminium poles around a tent, as thin column items: they show on the 2D plan and block
+ * tables and walking like any column. Long sides reach the eaves; poles on the end walls
+ * reach the roof above them. The span in between stays free of poles.
+ */
+export function tentPoles(hall: Pick<Hall, 'width' | 'length' | 'height'>): Item[] {
+  const { alongX, len, span, rise } = tentRoof(hall);
+  const poles: Array<{ along: number; across: number; height: number }> = [];
+  for (const along of bayStops(len)) {
+    poles.push({ along, across: 0, height: hall.height });
+    poles.push({ along, across: span, height: hall.height });
+  }
+  for (const across of bayStops(span).slice(1, -1)) {
+    const height = round6(hall.height + rise * (1 - Math.abs(across - span / 2) / (span / 2)));
+    poles.push({ along: 0, across, height });
+    poles.push({ along: len, across, height });
+  }
+  const inside = (v: number, size: number) => Math.min(size - POLE_INSET, Math.max(POLE_INSET, v));
+  return poles.map((p, i) => ({
+    id: `${TENT_POLE_PREFIX}${i}`,
+    type: 'column',
+    x: inside(alongX ? p.along : p.across, hall.width),
+    y: inside(alongX ? p.across : p.along, hall.length),
+    rotation: 0,
+    width: POLE_SIZE,
+    depth: POLE_SIZE,
+    height: p.height,
+    color: POLE_COLOR,
+  }));
+}
+
 // ----- wall and ceiling placement ------------------------------------------------
 
 /** Plan rotation (degrees, clockwise) that turns an item's front toward the room. */

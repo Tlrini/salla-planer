@@ -17,6 +17,7 @@ import {
   ScanName,
   ScanProgressBody,
   ScanPurpose,
+  ScanQuality,
   type ScanClaim,
   type ScanJob,
   type ScanList,
@@ -31,7 +32,7 @@ import type { DB } from '../db.js';
 import { imageType } from './images.js';
 import { createHallTemplate } from './halls.js';
 import { createLibraryItem } from './library.js';
-import { isGlb, removeUploadFile } from './uploads.js';
+import { isGlb, MODELS_URL, removeUploadFile } from './uploads.js';
 
 export const SCANS_URL = '/uploads/scans/';
 const LEASE_HEADER = 'x-scan-lease';
@@ -42,6 +43,7 @@ interface ScanRow {
   purpose: ScanPurpose;
   hall_id: string | null;
   source: ScanSource;
+  quality: ScanQuality;
   file_count: number;
   status: ScanStatus;
   progress: number;
@@ -63,6 +65,7 @@ const toJob = (r: ScanRow): ScanJob => ({
   name: r.name,
   purpose: r.purpose,
   source: r.source,
+  quality: r.quality,
   fileCount: r.file_count,
   status: r.status,
   progress: r.progress,
@@ -163,6 +166,7 @@ export function registerScanRoutes(
 
     let name = '';
     let purposeField = 'decor';
+    let qualityField = 'quick';
     let video: string | null = null;
     let photos = 0;
     let total = 0;
@@ -180,6 +184,7 @@ export function registerScanRoutes(
         if (part.type === 'field') {
           if (part.fieldname === 'name') name = String(part.value);
           if (part.fieldname === 'purpose') purposeField = String(part.value);
+          if (part.fieldname === 'quality') qualityField = String(part.value);
           continue;
         }
         // Stream to disk (a video can be hundreds of MB), then check what it really is.
@@ -214,18 +219,21 @@ export function registerScanRoutes(
     if (!parsedName.success) return fail(400, 'invalid_name');
     const purpose = ScanPurpose.safeParse(purposeField);
     if (!purpose.success) return fail(400, 'invalid_purpose');
+    const quality = ScanQuality.safeParse(qualityField);
+    if (!quality.success) return fail(400, 'invalid_quality');
     if (!video && photos === 0) return fail(400, 'no_file');
     if (!video && photos < MIN_SCAN_PHOTOS) return fail(400, 'too_few_photos');
 
     const user = req.user!;
     const now = stamp();
     db.prepare(
-      `INSERT INTO scan_jobs (id, name, purpose, source, file_count, status, created_by, created_by_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
+      `INSERT INTO scan_jobs (id, name, purpose, quality, source, file_count, status, created_by, created_by_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
     ).run(
       id,
       parsedName.data,
       purpose.data,
+      quality.data,
       video ? 'video' : 'photos',
       video ? 1 : photos,
       user.displayName,
@@ -299,11 +307,26 @@ export function registerScanRoutes(
     const body = ScanHallFinish.safeParse(req.body);
     if (!body.success)
       return reply.code(400).send({ error: 'invalid_body', issues: body.error.issues });
-    const template = createHallTemplate(db, body.data.hall, req.user!.displayName);
+    // The scan is the hall's 3D shell: move it out of the temporary scans folder. The address
+    // always comes from here, never from the request.
+    let hall = body.data.hall;
+    const scanFile = /^\/uploads\/scans\/([\w.-]+)$/.exec(row.result_file ?? '')?.[1];
+    if (hall.shell) {
+      if (!scanFile) return reply.code(409).send({ error: 'no_result' });
+      const models = path.join(dataDir, 'uploads', 'models');
+      fs.mkdirSync(models, { recursive: true });
+      const name = `hall-${nanoid(10)}.glb`;
+      fs.renameSync(
+        path.join(dataDir, 'uploads', 'scans', path.basename(scanFile)),
+        path.join(models, name),
+      );
+      hall = { ...hall, shell: { ...hall.shell, url: `${MODELS_URL}${name}` } };
+    }
+    const template = createHallTemplate(db, hall, req.user!.displayName);
     db.prepare(
       `UPDATE scan_jobs SET status = 'done', hall_id = ?, result_file = NULL, updated_at = ? WHERE id = ?`,
     ).run(template.id, stamp(), row.id);
-    removeUploadFile(dataDir, row.result_file ?? undefined);
+    if (!hall.shell) removeUploadFile(dataDir, row.result_file ?? undefined);
     removeInputs(row.id);
     return reply.code(201).send(template);
   });
@@ -399,7 +422,7 @@ export function registerScanRoutes(
           `UPDATE scan_jobs SET status = 'processing', attempts = attempts + 1, lease = ?, heartbeat_at = ?,
              progress = 0, stage = 'download', error = NULL, updated_at = ? WHERE id = ?`,
         ).run(lease, now, stamp(), r.id);
-        return { id: r.id, lease, source: r.source, purpose: r.purpose, files };
+        return { id: r.id, lease, source: r.source, purpose: r.purpose, quality: r.quality, files };
       }
       return null;
     })();

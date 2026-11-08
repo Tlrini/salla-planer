@@ -479,3 +479,132 @@ describe('scanning (Beta 5)', () => {
     expect((await req('DELETE', `/api/scans/${claim.id}`, agent)).statusCode).toBe(200);
   });
 });
+
+describe('scan quality, scanned halls and scanned chairs', () => {
+  const realGlb = fs.readFileSync(path.join(__dirname, '../../e2e/fixtures/flower-vase.glb'));
+
+  const processed = async (parts: Part[]) => {
+    const created = (await upload('/api/scans', agent, parts)).json() as ScanJob;
+    const claim = (await worker('POST', 'claim')).json() as ScanClaim;
+    expect(claim.id).toBe(created.id);
+    await worker('POST', `jobs/${claim.id}/result`, {
+      lease: claim.lease,
+      parts: [{ name: 'file', filename: 'scan.glb', content: glb }],
+    });
+    return { created, claim, ready: await job(claim.id) };
+  };
+
+  it('stores the chosen quality and hands it to the worker', async () => {
+    const bad = await upload('/api/scans', agent, [
+      { name: 'quality', value: 'turbo' },
+      ...videoScan('X'),
+    ]);
+    expect(bad.json()).toEqual({ error: 'invalid_quality' });
+
+    const quick = await processed(videoScan('Pa zgjedhje'));
+    expect(quick.created.quality).toBe('quick');
+    expect(quick.claim.quality).toBe('quick');
+    const detailed = await processed([
+      { name: 'quality', value: 'detailed' },
+      ...videoScan('Me detaje'),
+    ]);
+    expect(detailed.created.quality).toBe('detailed');
+    expect(detailed.claim.quality).toBe('detailed');
+  });
+
+  const hallBody = {
+    name: 'Tenda e bardhë',
+    width: 20,
+    length: 12,
+    height: 3.2,
+    floor: 'parket',
+    floorColor: '#B98A5E',
+    wallColor: '#F3EBDD',
+    structure: [],
+    kind: 'skan',
+    shell: {
+      url: '/uploads/scans/anything.glb',
+      turn: { x: 90, z: 0, yaw: 3 },
+      scale: 0.5,
+      offset: { x: 1, y: 0, z: 2 },
+    },
+  };
+
+  it('keeps the scan as the 3D shell of the hall, also through a share link', async () => {
+    const { ready, created } = await processed([
+      { name: 'purpose', value: 'hall' },
+      ...videoScan('Tenda'),
+    ]);
+    const res = await req('POST', `/api/scans/${created.id}/finish-hall`, agent, {
+      hall: hallBody,
+    });
+    expect(res.statusCode).toBe(201);
+    const template = res.json() as { hall: typeof hallBody };
+    const shell = template.hall.shell;
+    // The address comes from the server, not from the request.
+    expect(shell.url).toMatch(/^\/uploads\/models\/hall-[\w-]+\.glb$/);
+    expect(shell).toMatchObject({ turn: hallBody.shell.turn, scale: 0.5 });
+    const stored = path.join(dataDir, 'uploads/models', path.basename(shell.url));
+    expect(fs.existsSync(stored)).toBe(true);
+    expect(fs.existsSync(path.join(dataDir, ready.resultFile!))).toBe(false);
+
+    const project = (
+      await req('POST', '/api/projects', agent, {
+        name: 'Dasma në tendë',
+        clientName: 'Arta',
+        eventType: 'dasme',
+        status: 'draft',
+        hall: template.hall,
+        items: [],
+      })
+    ).json() as { id: string };
+    const share = (await req('POST', `/api/projects/${project.id}/shares`, agent, {})).json() as {
+      token: string;
+    };
+    const pub = (await built.app.inject({ url: `/api/public/share/${share.token}` })).json() as {
+      project: { hall: typeof hallBody };
+    };
+    const publicUrl = pub.project.hall.shell.url;
+    expect(publicUrl).toContain(`/api/public/share/${share.token}/file/models/`);
+    expect((await built.app.inject({ url: publicUrl })).statusCode).toBe(200);
+  });
+
+  it('turns a library scan into the chair model, admins only, as a lighter copy', async () => {
+    const lib = (
+      await upload('/api/library', agent, [
+        { name: 'file', filename: 'karrige.glb', content: realGlb },
+      ])
+    ).json() as { id: string; modelFile: string };
+    const body = { libraryId: lib.id };
+
+    const forbidden = await req('POST', '/api/catalog/chair/model-from-library', agent, body);
+    expect(forbidden.statusCode).toBe(403);
+    const notTable = await req('POST', '/api/catalog/stage/model-from-library', admin, body);
+    expect(notTable.json()).toEqual({ error: 'not_allowed' });
+    const noScan = await req('POST', '/api/catalog/chair/model-from-library', admin, {
+      libraryId: 'chair',
+    });
+    expect(noScan.json()).toEqual({ error: 'scan_not_found' });
+
+    const res = await req('POST', '/api/catalog/chair/model-from-library', admin, body);
+    expect(res.statusCode).toBe(200);
+    const chair = res.json() as { modelFile: string; scaleMode: string };
+    expect(chair.scaleMode).toBe('uniform');
+    expect(chair.modelFile).not.toBe(lib.modelFile);
+    const copy = path.join(dataDir, 'uploads/models', path.basename(chair.modelFile));
+    expect(fs.readFileSync(copy).toString('ascii', 0, 4)).toBe('glTF');
+
+    const table = await req('POST', '/api/catalog/table_round_10/model-from-library', admin, body);
+    expect(table.json()).toMatchObject({ scaleMode: 'stretch' });
+
+    // The library item stays independent, and removing the model restores the built-in chair.
+    expect(fs.existsSync(path.join(dataDir, 'uploads/models', path.basename(lib.modelFile)))).toBe(
+      true,
+    );
+    const removed = await req('DELETE', '/api/catalog/chair/model', admin);
+    const after = removed.json() as Record<string, unknown>;
+    expect(after.modelFile).toBeUndefined();
+    expect(after.scaleMode).toBeUndefined();
+    expect(fs.existsSync(copy)).toBe(false);
+  });
+});

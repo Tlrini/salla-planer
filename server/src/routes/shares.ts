@@ -246,7 +246,19 @@ export function registerShareRoutes(
         eventType: project.eventType,
         eventDate: project.eventDate,
         status: project.status,
-        hall: { ...project.hall, underlay: undefined },
+        hall: {
+          ...project.hall,
+          underlay: undefined,
+          // The client has no login: the scanned room comes through this link too.
+          ...(project.hall.shell
+            ? {
+                shell: {
+                  ...project.hall.shell,
+                  url: fileUrl(project.hall.shell.url) ?? project.hall.shell.url,
+                },
+              }
+            : {}),
+        },
         items: project.items,
         option: project.option,
         otherOptions: project.otherOptions,
@@ -298,9 +310,11 @@ export function registerShareRoutes(
       if (!l) return reply.code(404).send({ error: 'not_found' });
       const url = `/uploads/${req.params.folder}/${req.params.name}`;
       // Only files of decor that this project actually uses.
-      const allowed = usedCatalog(l.project, readCatalog(db)).some((c) =>
-        [c.modelFile, c.thumbnail, c.topView].includes(url),
-      );
+      const allowed =
+        l.project.hall.shell?.url === url ||
+        usedCatalog(l.project, readCatalog(db)).some((c) =>
+          [c.modelFile, c.thumbnail, c.topView].includes(url),
+        );
       if (!allowed || !/^(models|thumbs)$/.test(req.params.folder)) return notFound(reply);
       const file = path.join(dataDir, 'uploads', req.params.folder, path.basename(req.params.name));
       if (!fs.existsSync(file)) return notFound(reply);

@@ -9,7 +9,13 @@ import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { Modal } from '../../components/Modal';
 import { sq } from '../../i18n/sq';
 import { NumberField, TextField } from '../editor/fields';
-import { hallFromScan, PLAN_CUT_HEIGHT, planImageSize, validHallSize } from './hallFit';
+import {
+  hallFromScan,
+  PLAN_CUT_HEIGHT,
+  planImageSize,
+  shellOffset,
+  validHallSize,
+} from './hallFit';
 
 const DEG = Math.PI / 180;
 const GRID_COLOR = '#9aa6ba';
@@ -17,6 +23,13 @@ const GRID_COLOR = '#9aa6ba';
 const FLOOR_COLOR = '#B98A5E';
 const WALL_COLOR = '#F3EBDD';
 const UNDERLAY_OPACITY = 0.7;
+
+interface Fit {
+  width: number;
+  length: number;
+  scale: number;
+  offset: { x: number; y: number; z: number };
+}
 
 interface Turn {
   /** Quarter turns that make the scan stand upright (degrees). */
@@ -73,10 +86,11 @@ function fitRig(rig: Rig, turn: Turn, realHeight: number) {
   if (box.isEmpty()) return null;
   const size = box.getSize(new THREE.Vector3());
   const fit = hallFromScan(size, realHeight);
+  const offset = shellOffset(box.min, fit.scale);
   rig.root.scale.setScalar(fit.scale);
-  rig.root.position.set(-box.min.x * fit.scale, -box.min.y * fit.scale, -box.min.z * fit.scale);
+  rig.root.position.set(offset.x, offset.y, offset.z);
   rig.root.updateMatrixWorld(true);
-  return fit;
+  return { ...fit, offset };
 }
 
 /** Top-down picture of the fitted scan, cut at PLAN_CUT_HEIGHT, transparent around the floor. */
@@ -139,12 +153,14 @@ function FitScan({
   rig: Rig;
   turn: Turn;
   height: number;
-  onFit: (fit: { width: number; length: number } | null) => void;
+  onFit: (fit: Fit | null) => void;
 }) {
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => {
     const fit = fitRig(rig, turn, height);
-    onFit(fit ? { width: fit.width, length: fit.length } : null);
+    onFit(
+      fit ? { width: fit.width, length: fit.length, scale: fit.scale, offset: fit.offset } : null,
+    );
     invalidate();
   }, [rig, turn, height, onFit, invalidate]);
   return <primitive object={rig.root} />;
@@ -226,7 +242,8 @@ function HallForm({
   const [turn, setTurn] = useState<Turn>({ x: 0, z: 0, yaw: 0 });
   const [height, setHeight] = useState(4);
   const [name, setName] = useState(job.name);
-  const [fit, setFit] = useState<{ width: number; length: number } | null>(null);
+  const [fit, setFit] = useState<Fit | null>(null);
+  const [scanned, setScanned] = useState<'hall' | 'tent' | 'other'>('hall');
   const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle');
   const [failed, setFailed] = useState(false);
 
@@ -262,6 +279,12 @@ function HallForm({
         floorColor: FLOOR_COLOR,
         wallColor: WALL_COLOR,
         structure: [],
+        // The scan itself is the room in 3D, whatever kind of place it is.
+        kind: 'skan',
+        // The server stores the model and replaces this address with the final one.
+        shell: { url: url, turn, scale: fit.scale, offset: fit.offset },
+        // A scanned tent can also be switched to the drawn tent in the hall settings.
+        ...(scanned === 'tent' ? { tent: { openSides: false } } : {}),
         underlay: {
           url: planUrl,
           x: 0,
@@ -358,6 +381,22 @@ function HallForm({
             <span className="mono small">{turn.yaw}°</span>
           </label>
         </fieldset>
+        <div className="field">
+          <span className="field-label">{sq.scan.hallKind}</span>
+          <div className="segmented" role="group" aria-label={sq.scan.hallKind}>
+            {(['hall', 'tent', 'other'] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={scanned === k}
+                onClick={() => setScanned(k)}
+              >
+                {sq.scan.hallKinds[k]}
+              </button>
+            ))}
+          </div>
+          <p className="muted small">{sq.scan.hallKindHint}</p>
+        </div>
         <TextField label={sq.scan.hallName} value={name} onCommit={setName} live />
         <NumberField
           label={sq.scan.hallHeight}
