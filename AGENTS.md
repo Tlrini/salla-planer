@@ -441,6 +441,11 @@ Hosting changed (user approved, 2026-11-06): the app server is an on/off EC2 t3.
 Elastic IP instead of always-on Lightsail; `deploy/idle-stop.sh` powers it off after an idle
 hour (reads `GET /api/worker/status`, activity from `server/src/activity.ts`), and
 `deploy/start-link/index.mjs` (AWS Lambda) lets agents start it.
+Wall and ceiling decor (2026-11-08): `Item.mount` ('wall' | 'ceiling', missing = floor) and
+`Item.elevation` (wall items' bottom edge); `allowedMounts`, `wallPlacement`, `baseHeight`,
+`mountPatch` in `shared/src/geometry.ts` (wall items face the room, never rotate, never block
+floor/walking); 3D drag onto walls/ceiling via `roomSurfaceHit` (`viewer3d/picking.ts`) and drop
+from the catalog into 3D (`Drop3D` in `viewer3d/Edit3D.tsx`).
 Also added (2026-11-06): editing in 3D (`viewer3d/Edit3D.tsx`, pure picking in
 `viewer3d/picking.ts`, drag preview in `viewer3d/drag3d.ts`); whole-hall scans
 (`scan_jobs.purpose` – migration 8, `POST /api/scans/:id/finish-hall`,

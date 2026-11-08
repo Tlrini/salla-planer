@@ -1,13 +1,18 @@
 import { Copy, Lock, LockOpen, RotateCcw, RotateCw, Trash, X } from 'lucide-react';
 import {
   acceptsTableDecor,
+  allowedMounts,
   autoLabels,
+  baseHeight,
+  clampElevation,
   formatEUR,
   formatMeters,
   hasChairs,
+  mountPatch,
   normalizeAngle,
   seatCount,
   type Item,
+  type Mount,
 } from '@salla/shared';
 import { sq } from '../../i18n/sq';
 import { catalogMap, useEditor } from '../../model/store';
@@ -121,14 +126,23 @@ function SingleItem({ item }: { item: Item }) {
         )}
       </div>
 
+      <MountField item={item} />
+
       <div className="field-row">
-        <NumberField
-          label={sq.props.rotation}
-          value={item.rotation}
-          decimals={0}
-          unit="°"
-          onCommit={(v) => v !== undefined && update({ rotation: normalizeAngle(v) })}
-        />
+        {item.mount === 'wall' ? (
+          <div className="field">
+            <span className="field-label">{sq.props.rotation}</span>
+            <span className="readonly mono">{Math.round(item.rotation)}°</span>
+          </div>
+        ) : (
+          <NumberField
+            label={sq.props.rotation}
+            value={item.rotation}
+            decimals={0}
+            unit="°"
+            onCommit={(v) => v !== undefined && update({ rotation: normalizeAngle(v) })}
+          />
+        )}
         {hasChairs(cat) && (
           <NumberField
             label={sq.props.seats}
@@ -156,6 +170,60 @@ function SingleItem({ item }: { item: Item }) {
         />
       )}
       {acceptsTableDecor(cat) && !item.locked && <TableDecorPicker tables={[item]} />}
+    </>
+  );
+}
+
+/**
+ * Floor / wall / ceiling for decor, and the height above the floor for wall items.
+ * Moving to a wall presses the item against the nearest wall, facing the room.
+ */
+function MountField({ item }: { item: Item }) {
+  const cat = catalogMap.get(item.type);
+  const hall = useEditor((s) => s.project.hall);
+  const items = useEditor((s) => s.project.items);
+  const allowed = allowedMounts(cat);
+  const current: Mount = item.mount ?? 'floor';
+  if (allowed.length < 2 && current === 'floor') return null;
+  const h = item.height ?? cat?.height ?? 0;
+  const update = (patch: Partial<Item>) => useEditor.getState().updateItems({ [item.id]: patch });
+  return (
+    <>
+      <div className="field">
+        <span className="field-label" id={`mount-${item.id}`}>
+          {sq.props.mount}
+        </span>
+        <div className="segmented" role="group" aria-labelledby={`mount-${item.id}`}>
+          {(['floor', 'wall', 'ceiling'] as const)
+            .filter((m) => allowed.includes(m) || m === current)
+            .map((m) => (
+              <button
+                key={m}
+                type="button"
+                aria-pressed={current === m}
+                disabled={item.locked}
+                onClick={() => current !== m && update(mountPatch(item, m, hall, catalogMap))}
+              >
+                {sq.props.mounts[m]}
+              </button>
+            ))}
+        </div>
+      </div>
+      {item.mount === 'wall' && (
+        <>
+          <NumberField
+            label={sq.props.elevation}
+            value={baseHeight(item, items, catalogMap, hall.height)}
+            unit="m"
+            min={0}
+            max={Math.max(0, hall.height - h)}
+            onCommit={(v) =>
+              v !== undefined && update({ elevation: clampElevation(v, h, hall.height) })
+            }
+          />
+          <p className="note">{sq.props.wallRotationHint}</p>
+        </>
+      )}
     </>
   );
 }

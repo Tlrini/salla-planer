@@ -123,10 +123,11 @@ function ItemNodeImpl({
   const strokeWidth = selected ? 2.5 : 1.5;
   // Scanned decor: its rendered top view replaces the flat color fill.
   const topView = useLoadedImage(cat?.topView);
-  const fill = topView
-    ? hexToRgba(item.color, 0.08)
-    : hexToRgba(item.color, item.type === 'chandelier' ? 0.25 : 0.4);
-  const dash = item.locked ? [10, 6] : undefined;
+  // Hanging things (chandelier, ceiling decor) are drawn lighter so the floor shows through.
+  const overhead = item.type === 'chandelier' || item.mount === 'ceiling';
+  const fill = topView ? hexToRgba(item.color, 0.08) : hexToRgba(item.color, overhead ? 0.25 : 0.4);
+  // Dashed: locked items (long dashes), wall and ceiling decor (short dashes).
+  const dash = item.locked ? [10, 6] : item.mount ? [4, 4] : undefined;
   const text = label ?? (showName ? cat?.name : undefined);
   const fontSize = label
     ? Math.max(18, Math.min(w, d) * (decor || decorated ? 0.2 : 0.3))

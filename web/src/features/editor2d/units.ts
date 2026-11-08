@@ -25,7 +25,9 @@ export function hexToRgba(hex: string, alpha: number): string {
 }
 
 /** Draw order: floor coverings first, ceiling items last. */
-export function layerRank(type: string): number {
+export function layerRank(type: string, mount?: 'wall' | 'ceiling'): number {
+  // Ceiling decor is drawn over everything so it can still be picked above tables.
+  if (mount === 'ceiling') return 4;
   if (type === 'dance_floor' || type === 'carpet_aisle') return 0;
   if (type === 'chandelier') return 3;
   if (type === 'centerpiece' || type === 'candle_group') return 2;

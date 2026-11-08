@@ -1,4 +1,4 @@
-import type { CatalogItem, Hall, Item } from './schemas.js';
+import type { CatalogItem, Hall, Item, Mount } from './schemas.js';
 
 /** Seat spacing for per-length tables (imperial): 1 seat per 0.6 m on each side. */
 export const SEAT_SPACING = 0.6;
@@ -148,8 +148,16 @@ export function footprintBox(item: Item, cat?: CatalogItem): Box {
   return { minX: b.minX - m, minY: b.minY - m, maxX: b.maxX + m, maxY: b.maxY + m };
 }
 
-/** Keep the item's bounding box inside the hall. Returns the corrected center. */
-export function clampToHall(item: Item, hall: Pick<Hall, 'width' | 'length'>, cat?: CatalogItem) {
+/**
+ * Keep the item's bounding box inside the hall. Returns the corrected center; a wall item is
+ * also pressed against its nearest wall and turned to face the room (`rotation` is then set).
+ */
+export function clampToHall(
+  item: Item,
+  hall: Pick<Hall, 'width' | 'length'>,
+  cat?: CatalogItem,
+): { x: number; y: number; rotation?: number } {
+  if (item.mount === 'wall') return wallPlacement(item, hall);
   // Use the footprint so the chairs around a table stay inside the walls too.
   const f = footprintBox(item, cat);
   const hx = (f.maxX - f.minX) / 2;
@@ -177,9 +185,12 @@ const LAYERED_TYPES = new Set([
   'candle_group',
 ]);
 
-/** Floor-level, overhead or table-top items: never "overlapping" and never blocking placement. */
-function isLayered(item: Pick<Item, 'type'>, catalog: CatalogMap): boolean {
-  return LAYERED_TYPES.has(item.type) || isTabletop(catalog.get(item.type));
+/**
+ * Floor-level, overhead, wall-mounted or table-top items: never "overlapping" and never
+ * blocking placement or walking.
+ */
+function isLayered(item: Pick<Item, 'type' | 'mount'>, catalog: CatalogMap): boolean {
+  return !!item.mount || LAYERED_TYPES.has(item.type) || isTabletop(catalog.get(item.type));
 }
 
 export function overlappingPairs(
@@ -379,6 +390,108 @@ export function nearestWall(
   return { wall, distance };
 }
 
+// ----- wall and ceiling placement ------------------------------------------------
+
+/** Plan rotation (degrees, clockwise) that turns an item's front toward the room. */
+export const WALL_ROTATION: Record<Wall, number> = { top: 0, right: 90, bottom: 180, left: 270 };
+
+/** Items that only make sense on the floor (furniture, floors, stage, the hanging chandelier). */
+const FLOOR_ONLY = new Set([
+  'stage',
+  'dance_floor',
+  'carpet_aisle',
+  'flower_arch',
+  'photo_corner',
+  'dj_booth',
+  'bar_counter',
+  'chandelier',
+]);
+
+/** Where a catalog item may be placed: decor can also go on walls and the ceiling. */
+export function allowedMounts(cat: CatalogItem | undefined): Mount[] {
+  if (!cat || cat.category === 'tables' || cat.category === 'structure' || FLOOR_ONLY.has(cat.id))
+    return ['floor'];
+  return ['floor', 'wall', 'ceiling'];
+}
+
+/** A wall item's center, flat against `wall` (default: the nearest one), facing the room. */
+export function wallPlacement(
+  item: Pick<Item, 'x' | 'y' | 'width' | 'depth'>,
+  hall: Pick<Hall, 'width' | 'length'>,
+  wall: Wall = nearestWall(item.x, item.y, hall).wall,
+): { x: number; y: number; rotation: number } {
+  const hw = item.width / 2;
+  const hd = item.depth / 2;
+  // Slide along the wall but keep the whole width on it.
+  const along = (v: number, size: number) =>
+    2 * hw >= size ? size / 2 : Math.min(size - hw, Math.max(hw, v));
+  const rotation = WALL_ROTATION[wall];
+  switch (wall) {
+    case 'top':
+      return { x: round6(along(item.x, hall.width)), y: round6(hd), rotation };
+    case 'bottom':
+      return { x: round6(along(item.x, hall.width)), y: round6(hall.length - hd), rotation };
+    case 'left':
+      return { x: round6(hd), y: round6(along(item.y, hall.length)), rotation };
+    case 'right':
+      return { x: round6(hall.width - hd), y: round6(along(item.y, hall.length)), rotation };
+  }
+}
+
+/** Highest allowed bottom edge for an item of height `h` (it must stay under the ceiling). */
+const maxElevation = (h: number, hallHeight: number) => Math.max(0, hallHeight - h);
+
+/** Where a new wall item hangs: its middle at eye height (1,6 m), inside floor and ceiling. */
+export function defaultElevation(h: number, hallHeight: number): number {
+  return round6(Math.min(maxElevation(h, hallHeight), Math.max(0, 1.6 - h / 2)));
+}
+
+/** A wall item's bottom edge for a wished height, kept between floor and ceiling. */
+export function clampElevation(elevation: number, h: number, hallHeight: number): number {
+  return round6(Math.min(maxElevation(h, hallHeight), Math.max(0, elevation)));
+}
+
+/**
+ * Height (m) of the item's bottom in the 3D scene: on the ceiling it hangs with its top at the
+ * ceiling, on a wall at its elevation, otherwise on the floor or the table under it.
+ */
+export function baseHeight(
+  item: Item,
+  items: readonly Item[],
+  catalog: CatalogMap,
+  hallHeight: number,
+): number {
+  if (!item.mount) return supportHeight(item, items, catalog);
+  const h = item.height ?? catalog.get(item.type)?.height ?? 0;
+  if (item.mount === 'ceiling') return maxElevation(h, hallHeight);
+  return clampElevation(item.elevation ?? defaultElevation(h, hallHeight), h, hallHeight);
+}
+
+/**
+ * The fields to change when an item moves to another place (floor, wall or ceiling).
+ * A wall item goes to `at.wall`, or to the wall nearest to `at` (default: where it is now).
+ */
+export function mountPatch(
+  item: Item,
+  mount: Mount,
+  hall: Pick<Hall, 'width' | 'length' | 'height'>,
+  catalog: CatalogMap,
+  at: { x: number; y: number; elevation?: number; wall?: Wall } = item,
+): Partial<Item> {
+  const cat = catalog.get(item.type);
+  const moved = { ...item, x: at.x, y: at.y };
+  if (mount === 'wall') {
+    const h = item.height ?? cat?.height ?? 0;
+    const elevation =
+      at.elevation !== undefined
+        ? clampElevation(at.elevation, h, hall.height)
+        : (item.elevation ?? defaultElevation(h, hall.height));
+    return { mount: 'wall', elevation, ...wallPlacement(moved, hall, at.wall) };
+  }
+  const { x, y } = clampToHall({ ...moved, mount: undefined }, hall, cat);
+  return { mount: mount === 'ceiling' ? 'ceiling' : undefined, elevation: undefined, x, y };
+}
+
 /** Clear walking space kept around auto-placed tables (m). */
 export const AISLE = 1.2;
 /** Gaps between tables below this are flagged (m). */
@@ -428,7 +541,7 @@ export function autoLayoutTables(
   const y0 = (hall.length - gridL) / 2 + fd / 2;
 
   const obstacles = [...items, ...hall.structure]
-    .filter((i) => !NON_BLOCKING.has(i.type) && !isTabletop(catalog.get(i.type)))
+    .filter((i) => !i.mount && !NON_BLOCKING.has(i.type) && !isTabletop(catalog.get(i.type)))
     .map((i) => {
       const b = footprintBox(i, catalog.get(i.type));
       return {

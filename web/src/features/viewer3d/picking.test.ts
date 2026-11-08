@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Item } from '@salla/shared';
-import { itemBox, pickBox, rayAtHeight, rayBoxDistance, type Ray3 } from './picking';
+import {
+  itemBox,
+  pickBox,
+  rayAtHeight,
+  rayBoxDistance,
+  roomSurfaceHit,
+  type Ray3,
+} from './picking';
 
 const item = (over: Partial<Item>): Item => ({
   id: 't1',
@@ -65,5 +72,38 @@ describe('3D picking', () => {
     expect(
       rayAtHeight({ origin: { x: 0, y: 1, z: 0 }, direction: { x: 1, y: 0, z: 0 } }, 0),
     ).toBeNull();
+  });
+});
+
+describe('roomSurfaceHit', () => {
+  const room = { width: 10, length: 8, height: 4 };
+  const ray = (o: [number, number, number], d: [number, number, number]): Ray3 => {
+    const len = Math.hypot(...d);
+    return {
+      origin: { x: o[0], y: o[1], z: o[2] },
+      direction: { x: d[0] / len, y: d[1] / len, z: d[2] / len },
+    };
+  };
+  it('finds the floor, the ceiling and each wall from inside', () => {
+    expect(roomSurfaceHit(ray([5, 2, 4], [0, -1, 0]), room)?.surface).toBe('floor');
+    expect(roomSurfaceHit(ray([5, 2, 4], [0, 1, 0]), room)?.surface).toBe('ceiling');
+    expect(roomSurfaceHit(ray([5, 2, 4], [0, 0, -1]), room)).toMatchObject({
+      surface: 'wall',
+      wall: 'top',
+      point: { x: 5, y: 2, z: 0 },
+    });
+    expect(roomSurfaceHit(ray([5, 2, 4], [0, 0, 1]), room)?.wall).toBe('bottom');
+    expect(roomSurfaceHit(ray([5, 2, 4], [-1, 0, 0]), room)?.wall).toBe('left');
+    expect(roomSurfaceHit(ray([5, 2, 4], [1, 0, 0]), room)?.wall).toBe('right');
+  });
+  it('looks through the near wall from an outside camera, like the dollhouse view', () => {
+    // Camera in front of the bottom wall, looking in: hits the far (top) wall, not the near one.
+    const hit = roomSurfaceHit(ray([5, 2, 20], [0, 0, -1]), room);
+    expect(hit).toMatchObject({ surface: 'wall', wall: 'top' });
+    // From above and outside, looking down into the room: the floor, not the ceiling.
+    expect(roomSurfaceHit(ray([5, 30, 4], [0, -1, 0]), room)?.surface).toBe('floor');
+  });
+  it('misses when the ray passes beside the hall', () => {
+    expect(roomSurfaceHit(ray([50, 2, 4], [0, -1, 0]), room)).toBeNull();
   });
 });

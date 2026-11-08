@@ -2,17 +2,21 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import {
+  allowedMounts,
+  baseHeight,
   clampToHall,
+  mountPatch,
   snap,
-  supportHeight,
   type CatalogMap,
   type Hall,
   type Item,
+  type Mount,
 } from '@salla/shared';
-import { useEditor } from '../../model/store';
+import { catalogMap, createItem, useEditor } from '../../model/store';
 import { useUi } from '../../model/ui';
-import { useDrag3d } from './drag3d';
-import { itemBox, pickBox, rayAtHeight, type PickBox, type Ray3 } from './picking';
+import { ITEM_DRAG_MIME } from '../editor2d/units';
+import { useDrag3d, type DragPatch } from './drag3d';
+import { itemBox, pickBox, rayAtHeight, roomSurfaceHit, type PickBox, type Ray3 } from './picking';
 
 const GOLD = '#C9A44C';
 /** Pointer travel (px) before a press on an item becomes a drag instead of a tap. */
@@ -32,18 +36,72 @@ interface Props {
 
 function boxesFor(items: readonly Item[], hall: Hall, catalog: CatalogMap): PickBox[] {
   return items.map((it) =>
-    itemBox(it, catalog.get(it.type), supportHeight(it, items, catalog), hall.height),
+    itemBox(it, catalog.get(it.type), baseHeight(it, items, catalog, hall.height), hall.height),
   );
 }
 
+/** The pointer's ray through the scene (three.js only supplies the math). */
+function usePointerRay() {
+  const gl = useThree((s) => s.gl);
+  const camera = useThree((s) => s.camera);
+  return useMemo(() => {
+    const raycaster = new THREE.Raycaster();
+    const ndc = new THREE.Vector2();
+    return (e: { clientX: number; clientY: number }): Ray3 => {
+      const r = gl.domElement.getBoundingClientRect();
+      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+      raycaster.setFromCamera(ndc, camera);
+      const { origin, direction } = raycaster.ray;
+      return {
+        origin: { x: origin.x, y: origin.y, z: origin.z },
+        direction: { x: direction.x, y: direction.y, z: direction.z },
+      };
+    };
+  }, [gl, camera]);
+}
+
 /**
- * "Rregullo në 3D": tap an item to select it (Shift adds), drag it over the floor to move it.
+ * Where a decor item goes for a pointer ray: the wall or ceiling under the pointer if the item
+ * may hang there, otherwise the floor below the pointer. `null` when the pointer is off the hall.
+ */
+export function placementFor(
+  item: Item,
+  ray: Ray3,
+  hall: Hall,
+  catalog: CatalogMap,
+  snapOn: boolean,
+): { mount: Mount; patch: DragPatch } | null {
+  const cat = catalog.get(item.type);
+  const allowed = allowedMounts(cat);
+  const s = (v: number) => (snapOn ? snap(v, GRID) : v);
+  const hit = roomSurfaceHit(ray, hall);
+  if (hit?.surface === 'wall' && allowed.includes('wall')) {
+    const h = item.height ?? cat?.height ?? 0;
+    const at = { x: s(hit.point.x), y: s(hit.point.z), elevation: s(hit.point.y - h / 2) };
+    return {
+      mount: 'wall',
+      patch: mountPatch(item, 'wall', hall, catalog, { ...at, wall: hit.wall }) as DragPatch,
+    };
+  }
+  if (hit?.surface === 'ceiling' && allowed.includes('ceiling')) {
+    const at = { x: s(hit.point.x), y: s(hit.point.z) };
+    return { mount: 'ceiling', patch: mountPatch(item, 'ceiling', hall, catalog, at) as DragPatch };
+  }
+  const floor = hit?.surface === 'floor' ? { x: hit.point.x, y: hit.point.z } : rayAtHeight(ray, 0);
+  if (!floor) return null;
+  const at = { x: s(floor.x), y: s(floor.y) };
+  return { mount: 'floor', patch: mountPatch(item, 'floor', hall, catalog, at) as DragPatch };
+}
+
+/**
+ * "Rregullo në 3D": tap an item to select it (Shift adds), drag it to move it. Decor follows
+ * the pointer onto the floor, a wall or the ceiling; furniture slides over the floor.
  * Listens on the canvas in the capture phase, before OrbitControls: a press on an item never
  * turns the camera, a press on empty space orbits as usual. One undo step per finished drag.
  */
 export function Edit3DControls({ hall, items, catalog }: Props) {
   const gl = useThree((s) => s.gl);
-  const camera = useThree((s) => s.camera);
+  const rayOf = usePointerRay();
   const boxes = useMemo(() => boxesFor(items, hall, catalog), [items, hall, catalog]);
   // The listeners live as long as the canvas; a drag changes `items` (the preview) on every
   // move, so they read the latest values through this ref instead of re-subscribing.
@@ -54,29 +112,19 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
 
   useEffect(() => {
     const el = gl.domElement;
-    const raycaster = new THREE.Raycaster();
-    const ndc = new THREE.Vector2();
-    const rayOf = (e: PointerEvent): Ray3 => {
-      const r = el.getBoundingClientRect();
-      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      raycaster.setFromCamera(ndc, camera);
-      const { origin, direction } = raycaster.ray;
-      return {
-        origin: { x: origin.x, y: origin.y, z: origin.z },
-        direction: { x: direction.x, y: direction.y, z: direction.z },
-      };
-    };
 
     let drag: {
       pointerId: number;
       startX: number;
       startY: number;
-      /** Height of the grabbed point: the drag follows the pointer on that plane. */
+      /** Height of the grabbed point: a floor drag follows the pointer on that plane. */
       planeY: number;
       grab: { x: number; y: number };
       origins: Map<string, Item>;
+      /** One decor item: it follows the pointer onto walls and the ceiling too. */
+      surface: boolean;
       moved: boolean;
-      last: Record<string, { x: number; y: number }> | null;
+      last: Record<string, DragPatch> | null;
     } | null = null;
     let tap: { x: number; y: number; at: number } | null = null;
     let clearTimer: ReturnType<typeof setTimeout> | undefined;
@@ -87,7 +135,7 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
         if (drag && !drag.moved) drag = null;
         return;
       }
-      const { items, boxes } = latest.current;
+      const { items, boxes, catalog } = latest.current;
       const hit = pickBox(rayOf(e), boxes);
       if (!hit) {
         tap = { x: e.clientX, y: e.clientY, at: performance.now() };
@@ -117,6 +165,7 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
       }
       const grab = rayAtHeight(rayOf(e), hit.point.y);
       if (!origins.size || !grab) return;
+      const only = origins.size === 1 ? [...origins.values()][0]! : null;
       drag = {
         pointerId: e.pointerId,
         startX: e.clientX,
@@ -124,6 +173,7 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
         planeY: hit.point.y,
         grab,
         origins,
+        surface: !!only && allowedMounts(catalog.get(only.type)).length > 1,
         moved: false,
         last: null,
       };
@@ -137,19 +187,26 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
         Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < DRAG_START_PX
       )
         return;
-      const at = rayAtHeight(rayOf(e), drag.planeY);
-      if (!at) return;
-      drag.moved = true;
       const { hall, catalog } = latest.current;
       const snapOn = useUi.getState().snap;
-      const dx = at.x - drag.grab.x;
-      const dy = at.y - drag.grab.y;
-      const next: Record<string, { x: number; y: number }> = {};
-      for (const [id, it] of drag.origins) {
-        const x = snapOn ? snap(it.x + dx, GRID) : it.x + dx;
-        const y = snapOn ? snap(it.y + dy, GRID) : it.y + dy;
-        next[id] = clampToHall({ ...it, x, y }, hall, catalog.get(it.type));
+      const next: Record<string, DragPatch> = {};
+      if (drag.surface) {
+        const [id, it] = [...drag.origins][0]!;
+        const placed = placementFor(it, rayOf(e), hall, catalog, snapOn);
+        if (!placed) return;
+        next[id] = placed.patch;
+      } else {
+        const at = rayAtHeight(rayOf(e), drag.planeY);
+        if (!at) return;
+        const dx = at.x - drag.grab.x;
+        const dy = at.y - drag.grab.y;
+        for (const [id, it] of drag.origins) {
+          const x = snapOn ? snap(it.x + dx, GRID) : it.x + dx;
+          const y = snapOn ? snap(it.y + dy, GRID) : it.y + dy;
+          next[id] = clampToHall({ ...it, x, y }, hall, catalog.get(it.type));
+        }
       }
+      drag.moved = true;
       drag.last = next;
       clearTimeout(clearTimer);
       useDrag3d.getState().setPreview(next);
@@ -170,7 +227,13 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
       if (commit) {
         // One store change = one undo step for the whole drag.
         const patches: Record<string, Partial<Item>> = {};
-        for (const [id, p] of Object.entries(last)) patches[id] = { x: p.x, y: p.y };
+        for (const [id, p] of Object.entries(last)) {
+          patches[id] = {
+            ...p,
+            ...(p.x !== undefined ? { x: snap(p.x, 0.01) } : {}),
+            ...(p.y !== undefined ? { y: snap(p.y, 0.01) } : {}),
+          };
+        }
         useEditor.getState().updateItems(patches);
         clearTimer = setTimeout(() => useDrag3d.getState().setPreview(null), PREVIEW_HOLD_MS);
       } else {
@@ -193,9 +256,61 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
       clearTimeout(clearTimer);
       useDrag3d.getState().setPreview(null);
     };
-  }, [gl, camera]);
+  }, [gl, rayOf]);
 
   return <SelectionBoxes boxes={boxes} />;
+}
+
+/**
+ * Drop from the catalog straight into the 3D view: the item lands where it was dropped, on
+ * the floor, a wall or the ceiling (if it may go there). Then "Rregullo" turns on so it can be
+ * moved right away.
+ */
+export function Drop3D({ hall }: { hall: Hall }) {
+  const gl = useThree((s) => s.gl);
+  const rayOf = usePointerRay();
+  const hallRef = useRef(hall);
+  useEffect(() => {
+    hallRef.current = hall;
+  });
+
+  useEffect(() => {
+    const el = gl.domElement;
+    const onOver = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes(ITEM_DRAG_MIME)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    };
+    const onDrop = (e: DragEvent) => {
+      const type = e.dataTransfer?.getData(ITEM_DRAG_MIME);
+      if (!type) return;
+      e.preventDefault();
+      if (!catalogMap.has(type)) return;
+      const hall = hallRef.current;
+      // A throw-away draft tells where it may go and how big it is.
+      const draft = createItem(type, { x: hall.width / 2, y: hall.length / 2 });
+      const placed = placementFor(draft, rayOf(e), hall, catalogMap, useUi.getState().snap);
+      const store = useEditor.getState();
+      if (!placed) {
+        store.addItem(type, { x: hall.width / 2, y: hall.length / 2 });
+      } else {
+        const { patch, mount } = placed;
+        store.addPlacedItem(type, mount, {
+          x: patch.x ?? draft.x,
+          y: patch.y ?? draft.y,
+          ...(patch.elevation !== undefined ? { elevation: patch.elevation } : {}),
+        });
+      }
+      useUi.getState().set({ edit3d: true });
+    };
+    el.addEventListener('dragover', onOver);
+    el.addEventListener('drop', onDrop);
+    return () => {
+      el.removeEventListener('dragover', onOver);
+      el.removeEventListener('drop', onDrop);
+    };
+  }, [gl, rayOf]);
+  return null;
 }
 
 /** Gold outline boxes around the selected items (drawn on top of everything). */

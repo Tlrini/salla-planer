@@ -389,6 +389,8 @@ export function BlueprintStage() {
       useEditor.getState().project.hall,
       catalogMap.get(item.type),
     );
+    // A wall item turns live as it slides around a corner onto another wall.
+    if (c.rotation !== undefined && this.rotation() !== c.rotation) this.rotation(c.rotation);
     return { x: c.x * CM * v.scale + v.x, y: c.y * CM * v.scale + v.y };
   }, []);
 
@@ -422,9 +424,12 @@ export function BlueprintStage() {
         x: snap(c.x, 0.01),
         y: snap(c.y, 0.01),
         ...(withTransform ? { rotation: next.rotation, width: next.width, depth: next.depth } : {}),
+        // A wall item turns to face the room from whichever wall it was dragged to.
+        ...(c.rotation !== undefined ? { rotation: c.rotation } : {}),
       };
       // Make the node match the committed model even if the store ends up unchanged.
       node.position({ x: patches[id].x! * CM, y: patches[id].y! * CM });
+      if (c.rotation !== undefined) node.rotation(c.rotation);
     }
     updateItems(patches);
   }, []);
@@ -455,7 +460,7 @@ export function BlueprintStage() {
 
   // ----- derived ---------------------------------------------------------------
   const sorted = useMemo(
-    () => [...items].sort((a, b) => layerRank(a.type) - layerRank(b.type)),
+    () => [...items].sort((a, b) => layerRank(a.type, a.mount) - layerRank(b.type, b.mount)),
     [items],
   );
   const labels = useMemo(() => autoLabels(items, catalogMap), [items]);

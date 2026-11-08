@@ -38,8 +38,17 @@ export const Item = z.object({
   locked: z.boolean().optional(),
   /** Tables: catalog id of the table-top decor standing on it (Beta 2), e.g. a scanned bouquet. */
   tableDecor: z.string().min(1).max(64).optional(),
+  /**
+   * Where the item is fixed: on a wall (flat against the nearest wall, facing the room) or
+   * hanging from the ceiling. Missing = standing on the floor (or on a table).
+   */
+  mount: z.enum(['wall', 'ceiling']).optional(),
+  /** Wall items: height of the item's bottom edge above the floor (m). */
+  elevation: z.number().finite().min(0).max(30).optional(),
 });
 export type Item = z.infer<typeof Item>;
+/** Where an item is placed: the floor (default), a wall or the ceiling. */
+export type Mount = 'floor' | 'wall' | 'ceiling';
 
 /** One design option of a project ("Opsioni A / B / C"): its own set of items. */
 export const DesignOption = z.object({

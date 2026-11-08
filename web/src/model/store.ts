@@ -7,12 +7,14 @@ import {
   catalogById,
   clampToHall,
   findFreeSpot,
+  mountPatch,
   normalizeAngle,
   snap,
   type CatalogItem,
   type DesignOption,
   type Hall,
   type Item,
+  type Mount,
   type Annotation,
   type OptionRef,
   type Project,
@@ -96,6 +98,15 @@ export interface EditorState {
   annotationId: string | null;
   meta: EditorMeta | null;
   addItem: (type: string, at: { x: number; y: number }, exact?: boolean) => string;
+  /**
+   * Add a new item exactly at a 3D drop point: on the floor, on the wall nearest to `at`
+   * (with `at.elevation` as its bottom edge) or on the ceiling. Selects it; one undo step.
+   */
+  addPlacedItem: (
+    type: string,
+    mount: Mount,
+    at: { x: number; y: number; elevation?: number },
+  ) => string;
   /** Add several new items of one type at exact positions, as one undo step. */
   addItemsAt: (type: string, positions: ReadonlyArray<{ x: number; y: number }>) => string[];
   /** Apply patches to several items in one history step. Unchanged patches are ignored. */
@@ -176,6 +187,15 @@ export const useEditor = create<EditorState>()(
         return item.id;
       },
 
+      addPlacedItem: (type, mount, at) => {
+        const { project } = get();
+        const draft = createItem(type, at);
+        const placed = { ...draft, ...mountPatch(draft, mount, project.hall, catalogMap, at) };
+        const item = { ...placed, x: snap(placed.x, 0.01), y: snap(placed.y, 0.01) };
+        set({ project: touch(project, [...project.items, item]), selection: [item.id] });
+        return item.id;
+      },
+
       addItemsAt: (type, positions) => {
         const { project } = get();
         const added = positions.map((p) => createItem(type, p));
@@ -233,7 +253,8 @@ export const useEditor = create<EditorState>()(
       rotateItems: (ids, delta) => {
         const patches: Record<string, Partial<Item>> = {};
         for (const it of get().project.items) {
-          if (ids.includes(it.id) && !it.locked)
+          // Wall items always face the room: turning them would push them into the wall.
+          if (ids.includes(it.id) && !it.locked && it.mount !== 'wall')
             patches[it.id] = { rotation: normalizeAngle(it.rotation + delta) };
         }
         get().updateItems(patches);

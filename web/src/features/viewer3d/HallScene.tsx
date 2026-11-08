@@ -1,6 +1,6 @@
 import { memo, Suspense, useMemo } from 'react';
 import {
-  supportHeight,
+  baseHeight,
   tableDecorItems,
   type CatalogItem,
   type CatalogMap,
@@ -60,7 +60,8 @@ export function HallScene({ project, catalog, evening, catalogVersion, waitForMo
     for (const item of all) {
       const cat = catalog.get(item.type);
       if (!cat) continue;
-      const baseY = supportHeight(item, all, catalog);
+      // Floor, table top, wall (its elevation) or ceiling (top against it).
+      const baseY = baseHeight(item, all, catalog, hall.height);
       if (cat.modelFile) {
         const entry = models.get(cat.id) ?? { cat, placed: [] };
         entry.placed.push({ item, baseY });
@@ -72,7 +73,7 @@ export function HallScene({ project, catalog, evening, catalogVersion, waitForMo
     }
     return { procedural, models: [...models.values()] };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- catalogVersion marks catalog changes
-  }, [items, catalog, catalogVersion]);
+  }, [items, catalog, catalogVersion, hall.height]);
 
   return (
     <>

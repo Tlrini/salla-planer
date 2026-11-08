@@ -27,7 +27,7 @@ import { useUi, type CameraPreset } from '../../model/ui';
 import { useDebounced } from '../../model/useDebounced';
 import { CameraRig } from './CameraRig';
 import { useDrag3d } from './drag3d';
-import { Edit3DControls } from './Edit3D';
+import { Drop3D, Edit3DControls } from './Edit3D';
 import { Effects } from './Effects';
 import { autoViewpoints, CAMERA_FOV, type Pose } from './cameras';
 import { HallScene } from './HallScene';
@@ -230,6 +230,7 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
             />
             <CameraRig preset={camera} hall={hall} items={items} nonce={nonce} />
             {edit3d && <Edit3DControls hall={hall} items={items} catalog={catalogMap} />}
+            {!readOnly && kind === 'project' && <Drop3D hall={hall} />}
           </>
         )}
       </Canvas>

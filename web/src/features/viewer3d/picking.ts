@@ -1,4 +1,4 @@
-import type { CatalogItem, Item } from '@salla/shared';
+import type { CatalogItem, Item, Wall } from '@salla/shared';
 
 /**
  * Picking items in the 3D view (edit in 3D): every item is an oriented box, tested against the
@@ -123,4 +123,63 @@ export function rayAtHeight(ray: Ray3, y: number): { x: number; y: number } | nu
   const t = (y - ray.origin.y) / dy;
   if (t < 0) return null;
   return { x: ray.origin.x + ray.direction.x * t, y: ray.origin.z + ray.direction.z * t };
+}
+
+/** A point on the inside of the room: the floor, the ceiling or one of the four walls. */
+export interface SurfaceHit {
+  surface: 'floor' | 'ceiling' | 'wall';
+  /** Which wall (plan sides: top = y 0, left = x 0). */
+  wall?: Wall;
+  point: V3;
+  distance: number;
+}
+
+const EPS = 1e-6;
+
+/**
+ * The first inner room surface the ray hits. Walls and ceiling are only seen from inside (the
+ * 3D view hides their outer faces), so a ray from an outside camera passes through the near
+ * walls and lands on the floor, the far walls or the ceiling, just like what the user sees.
+ */
+export function roomSurfaceHit(
+  ray: Ray3,
+  hall: { width: number; length: number; height: number },
+): SurfaceHit | null {
+  const { origin: o, direction: d } = ray;
+  const W = hall.width;
+  const L = hall.length;
+  const H = hall.height;
+  const within = (v: number, max: number) => v >= -EPS && v <= max + EPS;
+  const candidates: Array<{ surface: SurfaceHit['surface']; wall?: Wall; t: number }> = [];
+  const plane = (
+    surface: SurfaceHit['surface'],
+    wall: Wall | undefined,
+    axis: 'x' | 'y' | 'z',
+    at: number,
+    /** The inner face is hit only when the ray moves toward this side. */
+    towardPositive: boolean,
+  ) => {
+    const dv = d[axis];
+    if (towardPositive ? dv <= EPS : dv >= -EPS) return;
+    const t = (at - o[axis]) / dv;
+    if (t <= 0) return;
+    const p = { x: o.x + d.x * t, y: o.y + d.y * t, z: o.z + d.z * t };
+    if (!within(p.x, W) || !within(p.y, H) || !within(p.z, L)) return;
+    candidates.push({ surface, wall, t });
+  };
+  plane('floor', undefined, 'y', 0, false);
+  plane('ceiling', undefined, 'y', H, true);
+  plane('wall', 'top', 'z', 0, false);
+  plane('wall', 'bottom', 'z', L, true);
+  plane('wall', 'left', 'x', 0, false);
+  plane('wall', 'right', 'x', W, true);
+  if (!candidates.length) return null;
+  const best = candidates.reduce((a, b) => (b.t < a.t ? b : a));
+  const t = best.t;
+  return {
+    surface: best.surface,
+    ...(best.wall ? { wall: best.wall } : {}),
+    point: { x: o.x + d.x * t, y: o.y + d.y * t, z: o.z + d.z * t },
+    distance: t,
+  };
 }

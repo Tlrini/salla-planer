@@ -55,7 +55,7 @@ function Plan({
   const y = (height - hall.length * CM * scale) / 2;
   const labels = autoLabels(items, catalog);
   const decorated = tablesUnderDecor(items);
-  const sorted = [...items].sort((a, b) => layerRank(a.type) - layerRank(b.type));
+  const sorted = [...items].sort((a, b) => layerRank(a.type, a.mount) - layerRank(b.type, b.mount));
 
   useEffect(() => {
     void document.fonts.ready.then(() => {
