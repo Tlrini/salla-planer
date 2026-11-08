@@ -48,6 +48,19 @@ Stop with `docker compose down` (data stays in `data/`).
 - Region: pick the one closest to Albania/Kosovo, e.g. **eu-central-1 (Frankfurt)** or
   **eu-south-1 (Milan)**.
 
+Sign in to the console as **Root user** with the account's email address. This guide never
+needs the account ID or an account alias: the backup user in 2.4 uses an access key, not a
+console login. If AWS support asks for the ID, it is in the account menu at the top right
+(12 digits). The alias (IAM → _Dashboard_ → _AWS Account_) is optional and only matters if you
+later add IAM users who sign in to the console.
+
+Before creating anything:
+
+- Turn on **MFA for the root user** (account menu → _Security credentials_ → _Assign MFA
+  device_).
+- Set a **budget alert** (Billing → _Budgets_ → _Create budget_, e.g. $35 / month) so an
+  unexpected cost sends you an email.
+
 ### 2.2 Create the server
 
 1. Lightsail → _Create instance_ → Linux → **Ubuntu 24.04 LTS** → plan **2 vCPU / 4 GB RAM**.
