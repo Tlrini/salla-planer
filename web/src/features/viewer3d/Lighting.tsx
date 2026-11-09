@@ -4,10 +4,13 @@ import { useThree } from '@react-three/fiber';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Hall, Item } from '@salla/shared';
 import { loadedHdri, loadHdri } from './environment';
+import { lampPositions, windowLight } from './lightPlan';
+import { TONE_MAPPING } from './composer';
 import { WARM_LIGHT } from './resources';
 
-/** Max real point lights in the evening (plus hemisphere, ambient and one directional). */
-const MAX_POINT_LIGHTS = 5;
+/** Brightness of one evening lamp; with real (inverse-square) falloff it lights a pool below it. */
+const LAMP_CANDELA = { evening: 52, day: 16 };
+const WHITE = new THREE.Color('#FFFFFF');
 
 interface Props {
   hall: Hall;
@@ -71,47 +74,54 @@ function useEnvironment(evening: boolean, waitForEnv: boolean) {
 }
 
 /** HDRI brightness (the photo is brighter than the generated studio light). */
-const HDRI_INTENSITY = { day: 0.55, evening: 0.12 };
+const HDRI_INTENSITY = { day: 0.7, evening: 0.1 };
 
-/** Day: bright neutral with one shadow-casting sun. Evening: dark ambient, warm chandeliers. */
+/**
+ * Day: soft light from above, bounced colour from the floor, daylight from the windows.
+ * Evening: dark room lit by warm chandeliers with real falloff, so light gathers in pools.
+ */
 export function Lighting({ hall, items, evening, waitForEnv = false }: Props) {
   useEnvironment(evening, waitForEnv);
+  const gl = useThree((s) => s.gl);
   const W = hall.width;
   const L = hall.length;
   const H = hall.height;
   const target = useMemo(() => new THREE.Object3D(), []);
   const size = Math.max(W, L);
-
-  const lamps = useMemo(() => {
-    const chandeliers = items.filter((i) => i.type === 'chandelier').slice(0, MAX_POINT_LIGHTS);
-    if (chandeliers.length)
-      return chandeliers.map((c) => [c.x, Math.max(1.8, H - 1.6), c.y] as [number, number, number]);
-    return [
-      [W * 0.3, H - 0.6, L / 2],
-      [W * 0.7, H - 0.6, L / 2],
-    ] as Array<[number, number, number]>;
-  }, [items, W, L, H]);
+  const lamps = useMemo(
+    () => lampPositions({ width: W, length: L, height: H }, items),
+    [items, W, L, H],
+  );
+  const daylight = useMemo(() => (evening ? null : windowLight(hall)), [evening, hall]);
+  const windowTarget = useMemo(() => new THREE.Object3D(), []);
+  // Light that comes back up from the floor takes on its colour; this is what lights the ceiling.
+  const bounce = useMemo(
+    () => `#${new THREE.Color(hall.floorColor).lerp(WHITE, 0.55).getHexString()}`,
+    [hall.floorColor],
+  );
+  useEffect(() => {
+    gl.toneMapping = TONE_MAPPING;
+  }, [gl]);
 
   return (
     <>
       <color attach="background" args={[evening ? '#0D1018' : '#E9EDF2']} />
-      <ambientLight intensity={evening ? 0.04 : 0.25} />
+      <ambientLight intensity={evening ? 0.02 : 0.08} />
       <hemisphereLight
-        args={[
-          evening ? '#30406A' : '#FFFFFF',
-          evening ? '#1A1410' : '#D8CBB5',
-          evening ? 0.12 : 0.8,
-        ]}
+        args={[evening ? '#4A4238' : '#FFFDF8', evening ? '#6A5238' : bounce, evening ? 0.6 : 0.85]}
       />
       <primitive object={target} position={[W / 2, 0, L / 2]} />
       <directionalLight
         target={target}
         position={[W * 0.25, H + size * 0.9, L * 0.8]}
-        intensity={evening ? 0.12 : 2.1}
+        color="#FFF4E6"
+        intensity={evening ? 0.08 : 1.45}
         castShadow
         shadow-mapSize={[2048, 2048]}
         shadow-bias={-0.0004}
-        shadow-normalBias={0.02}
+        shadow-normalBias={0.03}
+        shadow-radius={7}
+        shadow-blurSamples={14}
         shadow-camera-left={-size * 0.75}
         shadow-camera-right={size * 0.75}
         shadow-camera-top={size * 0.75}
@@ -119,17 +129,32 @@ export function Lighting({ hall, items, evening, waitForEnv = false }: Props) {
         shadow-camera-near={0.5}
         shadow-camera-far={size * 3 + H}
       />
-      {evening &&
-        lamps.map((p, i) => (
-          <pointLight
-            key={i}
-            position={p}
-            color={WARM_LIGHT}
-            intensity={14}
+      {daylight && (
+        <>
+          <primitive object={windowTarget} position={daylight.target} />
+          <spotLight
+            target={windowTarget}
+            position={daylight.position}
+            color="#FFF7EC"
+            intensity={Math.max(30, size * 6)}
+            angle={1.15}
+            penumbra={1}
+            decay={1.4}
             distance={0}
-            decay={1.6}
           />
-        ))}
+        </>
+      )}
+      {/* The hall's lights are on by day too: softer, but they give the walls some shape. */}
+      {lamps.map((p, i) => (
+        <pointLight
+          key={i}
+          position={p}
+          color={WARM_LIGHT}
+          intensity={evening ? LAMP_CANDELA.evening : LAMP_CANDELA.day}
+          distance={0}
+          decay={2}
+        />
+      ))}
     </>
   );
 }

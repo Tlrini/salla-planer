@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { pleatTexture } from './textures';
+import { glowTexture, pleatTexture } from './textures';
 import { tiled, type PbrSet } from './pbrTextures';
 
 /**
@@ -172,4 +172,19 @@ export function setFabricWeave(set: PbrSet): boolean {
     if (key.startsWith('cloth|')) addWeave(m as THREE.MeshStandardMaterial);
   }
   return true;
+}
+
+let glow: THREE.MeshBasicMaterial | null = null;
+
+/** Additive warm circle: candlelight on the surface around the flames (shared, one material). */
+export function candleGlow(): THREE.MeshBasicMaterial {
+  glow ??= new THREE.MeshBasicMaterial({
+    map: glowTexture(),
+    color: '#FFB067',
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  return glow;
 }

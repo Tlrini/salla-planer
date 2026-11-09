@@ -1,4 +1,4 @@
-import { geo, mat } from '../resources';
+import { candleGlow, geo, mat } from '../resources';
 import type { BuilderProps } from './types';
 
 const CANDLES: Array<[number, number, number]> = [
@@ -38,6 +38,17 @@ export function CandleGroup({ item, evening }: BuilderProps) {
           />
         </group>
       ))}
+      {evening && (
+        // The warm light the flames throw on the cloth around them.
+        <mesh
+          geometry={g.plane}
+          material={candleGlow()}
+          position={[0, 0.008, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          scale={[1.7, 1.7, 1]}
+          renderOrder={2}
+        />
+      )}
     </group>
   );
 }

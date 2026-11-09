@@ -28,6 +28,7 @@ import { useDebounced } from '../../model/useDebounced';
 import { CameraRig } from './CameraRig';
 import { useDrag3d } from './drag3d';
 import { Drop3D, Edit3DControls } from './Edit3D';
+import { SHADOW_MODE } from './composer';
 import { Effects } from './Effects';
 import { autoViewpoints, CAMERA_FOV, type Pose } from './cameras';
 import { HallScene } from './HallScene';
@@ -181,7 +182,7 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
       data-recording={recording ? true : undefined}
     >
       <Canvas
-        shadows
+        shadows={SHADOW_MODE}
         frameloop="demand"
         // "E lartë" spends its budget on the effects (AO, bloom, SMAA), not on extra pixels:
         // on an Intel Iris Xe with 20 tables it takes ~19 ms per frame at 1×, ~33 ms at 1.25×.

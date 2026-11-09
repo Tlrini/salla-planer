@@ -301,6 +301,21 @@ export function fairyLightsTexture(): THREE.Texture {
   });
 }
 
+/** Soft round glow, bright in the middle and fading to nothing at the edge. */
+export function glowTexture(): THREE.Texture {
+  return cached('glow', () => {
+    const S = 128;
+    const [cv, g] = canvas(S);
+    const grd = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+    grd.addColorStop(0, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.4, 'rgba(255,255,255,0.35)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, S, S);
+    return finish(cv, false);
+  });
+}
+
 /** Vertical light wash: bright at the bottom, fading up and to the sides. */
 export function washTexture(): THREE.Texture {
   return cached('wash', () => {

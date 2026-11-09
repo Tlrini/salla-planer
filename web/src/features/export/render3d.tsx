@@ -15,7 +15,7 @@ import {
 export type RenderView = CameraPreset | Pose;
 const EYE_FOV = 60;
 import { HallScene } from '../viewer3d/HallScene';
-import { createComposer } from '../viewer3d/composer';
+import { createComposer, SHADOW_MODE } from '../viewer3d/composer';
 
 // <Canvas> registers the three.js classes itself; a bare createRoot needs this once.
 extend(THREE as unknown as Parameters<typeof extend>[0]);
@@ -102,7 +102,7 @@ export async function render3d(
     size: { width: RENDER_WIDTH, height: RENDER_HEIGHT, top: 0, left: 0 },
     dpr: 1,
     frameloop: 'never',
-    shadows: true,
+    shadows: SHADOW_MODE,
     gl: { preserveDrawingBuffer: true, antialias: true },
     camera: { fov: CAMERA_FOV, near: 0.05, far: 600 },
   });

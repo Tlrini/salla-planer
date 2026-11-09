@@ -3,6 +3,7 @@ import { createRoot, extend, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { CatalogItem, Hall, Item } from '@salla/shared';
 import { EYE_HEIGHT, type Pose } from '../viewer3d/cameras';
+import { SHADOW_MODE } from '../viewer3d/composer';
 import { HallScene } from '../viewer3d/HallScene';
 
 extend(THREE as unknown as Parameters<typeof extend>[0]);
@@ -109,7 +110,7 @@ export async function renderPanorama(
     size: { width: PANO_WIDTH, height: PANO_HEIGHT, top: 0, left: 0 },
     dpr: 1,
     frameloop: 'never',
-    shadows: true,
+    shadows: SHADOW_MODE,
     gl: { preserveDrawingBuffer: true, antialias: false },
   });
   try {

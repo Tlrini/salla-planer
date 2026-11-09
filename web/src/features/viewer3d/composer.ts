@@ -11,6 +11,16 @@ import {
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 
+/**
+ * The tone curve, the same with and without effects so "Normale" and "E lartë" match. AgX keeps
+ * the shape of white cloth and walls where ACES burns them out to flat white.
+ */
+export const TONE_MAPPING: THREE.ToneMapping = THREE.AgXToneMapping;
+const TONE_MODE = ToneMappingMode.AGX;
+
+/** Soft shadows: three 0.187 removed PCFSoftShadowMap; variance shadows blur well and are cheap. */
+export const SHADOW_MODE = 'variance' as const;
+
 export interface EffectsOptions {
   evening: boolean;
   /** `live`: fewer AO samples for the interactive view; `export`: full quality, offline. */
@@ -62,7 +72,7 @@ export function createComposer(
         radius: 0.7,
       }),
     );
-  effects.push(new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }));
+  effects.push(new ToneMappingEffect({ mode: TONE_MODE }));
   composer.addPass(new EffectPass(camera, ...effects));
   // Edge smoothing on the final, tone-mapped image.
   composer.addPass(new EffectPass(camera, new SMAAEffect({ preset: SMAAPreset.HIGH })));

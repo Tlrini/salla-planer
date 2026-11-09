@@ -91,8 +91,11 @@ function useFloorMaterial(hall: Hall, wait: boolean) {
   return material;
 }
 
+/** How bright a ceiling is from light bounced off the floor in daytime. */
+const CEILING_BOUNCE = 0.2;
+
 /** Painted plaster: the wall colour with a real plaster relief, sized per wall. */
-function usePlaster(color: string, w: number, h: number, wait: boolean) {
+function usePlaster(color: string, w: number, h: number, wait: boolean, glow = 0) {
   const set = usePbr('plaster', wait);
   const material = useMemo(() => {
     if (!set) return null;
@@ -103,8 +106,11 @@ function usePlaster(color: string, w: number, h: number, wait: boolean) {
       roughnessMap: maps.roughnessMap,
       roughness: 0.95,
       normalScale: new THREE.Vector2(0.45, 0.45),
+      // Stands in for light bounced up from the floor, which a real-time renderer doesn't trace.
+      emissive: new THREE.Color(color),
+      emissiveIntensity: glow,
     });
-  }, [set, color, w, h]);
+  }, [set, color, w, h, glow]);
   useEffect(
     () => () => {
       if (material) disposeMaterial(material);
@@ -208,7 +214,8 @@ export function Hall3D({
   const plain = mat('matte', hall.wallColor);
   const longWall = usePlaster(hall.wallColor, W, H, wait) ?? plain;
   const shortWall = usePlaster(hall.wallColor, L, H, wait) ?? plain;
-  const ceiling = usePlaster('#FAF7F2', W, L, wait) ?? mat('matte', '#FAF7F2');
+  const ceiling =
+    usePlaster('#FAF7F2', W, L, wait, evening ? 0.015 : CEILING_BOUNCE) ?? mat('matte', '#FAF7F2');
   const box = (
     <>
       <mesh
