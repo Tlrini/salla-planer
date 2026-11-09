@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, WandSparkles } from 'lucide-react';
 import { formatEUR, type CatalogCategory } from '@salla/shared';
 import { sq } from '../../i18n/sq';
@@ -6,6 +6,7 @@ import { catalog, useCatalogVersion, useEditor } from '../../model/store';
 import { useUi } from '../../model/ui';
 import { ITEM_DRAG_MIME } from '../editor2d/units';
 import { CatalogIcon } from './CatalogIcon';
+import { clickSuppressed, isCatalogDragging, pressCatalogItem } from './touchDrag';
 import { AutoLayoutDialog } from '../editor/AutoLayoutDialog';
 
 const PROJECT_CATEGORIES: CatalogCategory[] = ['tables', 'stage', 'floral', 'lighting', 'other'];
@@ -44,7 +45,23 @@ export function CatalogSidebar({ kind }: { kind: 'project' | 'hall' }) {
       entries: catalog.filter((c) => c.category === category && c.active && c.source !== 'library'),
     })),
   ];
+  // A drag in progress must not scroll the list. The listener has to exist before the touch
+  // starts, and only a non-passive one may cancel the scroll.
+  const navRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const block = (e: TouchEvent) => {
+      if (isCatalogDragging()) e.preventDefault();
+    };
+    nav.addEventListener('touchmove', block, { passive: false });
+    return () => nav.removeEventListener('touchmove', block);
+  }, []);
+  // Phones and tablets use the long press below; on them HTML5 dragging would get in the way.
+  const mouseDrag = window.matchMedia('(hover: hover)').matches;
+
   const add = (type: string) => {
+    if (clickSuppressed()) return;
     const ui = useUi.getState();
     const { hall } = useEditor.getState().project;
     const at = ui.viewCenter ?? { x: hall.width / 2, y: hall.length / 2 };
@@ -53,7 +70,7 @@ export function CatalogSidebar({ kind }: { kind: 'project' | 'hall' }) {
   };
 
   return (
-    <nav className="catalog" aria-label={sq.catalog.title}>
+    <nav className="catalog" aria-label={sq.catalog.title} ref={navRef}>
       {kind === 'project' && (
         <>
           <button type="button" className="btn auto-layout-btn" onClick={() => setLayoutOpen(true)}>
@@ -88,7 +105,13 @@ export function CatalogSidebar({ kind }: { kind: 'project' | 'hall' }) {
                   <button
                     type="button"
                     className="catalog-item"
-                    draggable
+                    draggable={mouseDrag}
+                    onPointerDown={(e) =>
+                      pressCatalogItem(e, cat.id, () => useUi.getState().set({ drawer: 'none' }))
+                    }
+                    onContextMenu={(e) => {
+                      if (!mouseDrag) e.preventDefault();
+                    }}
                     onDragStart={(e) => {
                       e.dataTransfer.setData(ITEM_DRAG_MIME, cat.id);
                       e.dataTransfer.effectAllowed = 'copy';

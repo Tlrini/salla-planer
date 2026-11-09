@@ -1,9 +1,9 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { X } from 'lucide-react';
 import { sq } from '../../i18n/sq';
 import { useAutosave } from '../../model/autosave';
 import { useAvailabilitySync } from '../../model/availability';
-import { useCatalogVersion, useEditor } from '../../model/store';
+import { useCatalogVersion } from '../../model/store';
 import { useUi } from '../../model/ui';
 import { CatalogSidebar } from '../catalog/CatalogSidebar';
 import { BlueprintStage } from '../editor2d/BlueprintStage';
@@ -11,6 +11,8 @@ import { useEditorKeys } from '../editor2d/useEditorKeys';
 import { ConflictDialog } from './ConflictDialog';
 import { EditorTopBar } from './EditorTopBar';
 import { OptionsBar } from './OptionsBar';
+import { CatalogDragGhost } from '../catalog/CatalogDragGhost';
+import { SelectionBar } from './SelectionBar';
 import { PropertiesPanel } from './PropertiesPanel';
 
 // three.js is only downloaded when the 3D view is first opened.
@@ -37,18 +39,6 @@ export function Editor({ kind }: { kind: 'project' | 'hall' }) {
   const drawer = useUi((s) => s.drawer);
   const view = useUi((s) => s.view);
   const present = useUi((s) => s.present);
-  const hasSelection = useEditor((s) => s.selection.length > 0);
-
-  // On narrow screens, open the properties drawer when something gets selected.
-  useEffect(() => {
-    if (
-      hasSelection &&
-      window.matchMedia('(max-width: 900px)').matches &&
-      useUi.getState().drawer === 'none'
-    ) {
-      useUi.getState().set({ drawer: 'properties' });
-    }
-  }, [hasSelection]);
 
   return (
     <div className="editor" data-drawer={drawer} data-present={present || undefined}>
@@ -59,6 +49,7 @@ export function Editor({ kind }: { kind: 'project' | 'hall' }) {
       </aside>
       <main className="canvas-area" data-view={present ? '3d' : view}>
         {kind === 'project' && <OptionsBar />}
+        <SelectionBar />
         {view !== '3d' && !present && (
           <div className="pane pane-2d">
             <BlueprintStage />
@@ -77,6 +68,7 @@ export function Editor({ kind }: { kind: 'project' | 'hall' }) {
         <PropertiesPanel kind={kind} />
       </aside>
       <ConflictDialog kind={kind} />
+      <CatalogDragGhost />
       <div className="drawer-backdrop" onClick={() => useUi.getState().set({ drawer: 'none' })} />
     </div>
   );

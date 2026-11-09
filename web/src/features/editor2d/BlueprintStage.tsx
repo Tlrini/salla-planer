@@ -29,6 +29,7 @@ import { NumberField } from '../editor/fields';
 import { scaleUnderlay } from '../editor/UnderlaySettings';
 import type { Annotation } from '@salla/shared';
 import { CanvasControls } from './CanvasControls';
+import { registerDropTarget } from '../catalog/touchDrag';
 import { BLUEPRINT, CM, ITEM_DRAG_MIME, layerRank } from './units';
 import { sq } from '../../i18n/sq';
 
@@ -449,14 +450,26 @@ export function BlueprintStage() {
   const onTransformEnd = useCallback((ids: string[]) => commitNodes(ids, true), [commitNodes]);
 
   // ----- drop from the catalog (HTML5 drag) ------------------------------------
+  const dropAt = (type: string, clientX: number, clientY: number) => {
+    const rect = containerRef.current!.getBoundingClientRect();
+    const h = toHall({ x: clientX - rect.left, y: clientY - rect.top });
+    useEditor.getState().addItem(type, { x: h.x / CM, y: h.y / CM }, true);
+  };
   const onDrop = (e: React.DragEvent) => {
     const type = e.dataTransfer.getData(ITEM_DRAG_MIME);
     if (!type) return;
     e.preventDefault();
-    const rect = containerRef.current!.getBoundingClientRect();
-    const h = toHall({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-    useEditor.getState().addItem(type, { x: h.x / CM, y: h.y / CM }, true);
+    dropAt(type, e.clientX, e.clientY);
   };
+  // The same drop for a finger (see catalog/touchDrag.ts); the ref always sees the current view.
+  const dropRef = useRef(dropAt);
+  useEffect(() => {
+    dropRef.current = dropAt;
+  });
+  useEffect(
+    () => registerDropTarget(containerRef.current!, (type, x, y) => dropRef.current(type, x, y)),
+    [],
+  );
 
   // ----- derived ---------------------------------------------------------------
   const sorted = useMemo(

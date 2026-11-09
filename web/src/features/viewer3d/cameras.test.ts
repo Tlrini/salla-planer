@@ -76,3 +76,19 @@ describe('eye-level poses (Beta 3)', () => {
     expect(Math.abs(h.yaw)).toBeCloseTo(0); // looking back up the plan at the couple
   });
 });
+
+describe('ceiling view', () => {
+  it('stands inside the hall and looks up at the ceiling', () => {
+    const hall = {
+      width: 20,
+      length: 12,
+      height: 4,
+      structure: [],
+    } as unknown as (typeof EXAMPLE_HALLS)[number]['hall'];
+    const { position, target } = cameraFor('ceiling', hall, []);
+    expect(position[1]).toBeLessThan(target[1]);
+    expect(target[1]).toBe(4);
+    expect(position[0]).toBeGreaterThan(0);
+    expect(position[2]).toBeLessThan(12);
+  });
+});

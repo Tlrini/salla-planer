@@ -58,7 +58,7 @@ export function EditorTopBar({ kind }: { kind: 'project' | 'hall' }) {
       </button>
       <button
         type="button"
-        className="icon-btn drawer-toggle"
+        className="icon-btn drawer-toggle topbar-row2"
         aria-pressed={drawer === 'catalog'}
         onClick={() => toggleDrawer('catalog')}
         aria-label={sq.topbar.catalog}
@@ -112,7 +112,10 @@ export function EditorTopBar({ kind }: { kind: 'project' | 'hall' }) {
 
       {kind === 'project' && <WarningsBadge />}
 
-      <div className="segmented" role="group">
+      {/* Phones: everything after this break goes on a second row. */}
+      <span className="topbar-break" aria-hidden />
+
+      <div className="segmented topbar-row2" role="group">
         <button type="button" aria-pressed={view === '2d'} onClick={() => set({ view: '2d' })}>
           {sq.topbar.view2d}
         </button>
@@ -144,7 +147,7 @@ export function EditorTopBar({ kind }: { kind: 'project' | 'hall' }) {
 
       <button
         type="button"
-        className="icon-btn drawer-toggle"
+        className="icon-btn drawer-toggle topbar-row2"
         aria-pressed={drawer === 'properties'}
         onClick={() => toggleDrawer('properties')}
         aria-label={sq.topbar.properties}

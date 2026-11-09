@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { ContactShadows, OrbitControls } from '@react-three/drei';
 import {
+  ArrowUpToLine,
   Bookmark,
   BookmarkPlus,
   Circle,
@@ -224,7 +225,8 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
           <>
             <OrbitControls
               makeDefault
-              maxPolarAngle={Math.PI / 2 - 0.03}
+              // Looking up at the ceiling needs the camera below its target.
+              maxPolarAngle={camera === 'ceiling' ? Math.PI * 0.85 : Math.PI / 2 - 0.03}
               minDistance={0.3}
               maxDistance={size * 3}
               enableDamping={false}
@@ -237,6 +239,18 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
       </Canvas>
       {edit3d && !walk && (
         <div className="edit3d-bar" role="toolbar" aria-label={sq.viewer.edit3dTitle}>
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label={sq.viewer.lookUp}
+            title={sq.viewer.lookUp}
+            aria-pressed={camera === 'ceiling'}
+            onClick={() =>
+              set({ camera: 'ceiling', cameraNonce: useUi.getState().cameraNonce + 1 })
+            }
+          >
+            <ArrowUpToLine size={18} />
+          </button>
           {selectionCount > 0 ? (
             <>
               <span className="small">{sq.viewer.selected(selectionCount)}</span>

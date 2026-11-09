@@ -14,6 +14,7 @@ import {
 } from '@salla/shared';
 import { catalogMap, createItem, useEditor } from '../../model/store';
 import { useUi } from '../../model/ui';
+import { registerDropTarget } from '../catalog/touchDrag';
 import { ITEM_DRAG_MIME } from '../editor2d/units';
 import { useDrag3d, type DragPatch } from './drag3d';
 import { itemBox, pickBox, rayAtHeight, roomSurfaceHit, type PickBox, type Ray3 } from './picking';
@@ -281,15 +282,18 @@ export function Drop3D({ hall }: { hall: Hall }) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
     };
-    const onDrop = (e: DragEvent) => {
-      const type = e.dataTransfer?.getData(ITEM_DRAG_MIME);
-      if (!type) return;
-      e.preventDefault();
+    const dropAt = (type: string, clientX: number, clientY: number) => {
       if (!catalogMap.has(type)) return;
       const hall = hallRef.current;
       // A throw-away draft tells where it may go and how big it is.
       const draft = createItem(type, { x: hall.width / 2, y: hall.length / 2 });
-      const placed = placementFor(draft, rayOf(e), hall, catalogMap, useUi.getState().snap);
+      const placed = placementFor(
+        draft,
+        rayOf({ clientX, clientY }),
+        hall,
+        catalogMap,
+        useUi.getState().snap,
+      );
       const store = useEditor.getState();
       if (!placed) {
         store.addItem(type, { x: hall.width / 2, y: hall.length / 2 });
@@ -303,9 +307,18 @@ export function Drop3D({ hall }: { hall: Hall }) {
       }
       useUi.getState().set({ edit3d: true });
     };
+    const onDrop = (e: DragEvent) => {
+      const type = e.dataTransfer?.getData(ITEM_DRAG_MIME);
+      if (!type) return;
+      e.preventDefault();
+      dropAt(type, e.clientX, e.clientY);
+    };
     el.addEventListener('dragover', onOver);
     el.addEventListener('drop', onDrop);
+    // The same drop for a finger (see catalog/touchDrag.ts).
+    const unregister = registerDropTarget(el, dropAt);
     return () => {
+      unregister();
       el.removeEventListener('dragover', onOver);
       el.removeEventListener('drop', onDrop);
     };

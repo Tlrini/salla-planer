@@ -8,7 +8,7 @@ export type SaveStatus =
 export type CanvasMode = 'pan' | 'select';
 export type Drawer = 'none' | 'catalog' | 'properties';
 export type ViewMode = '2d' | '3d' | 'split';
-export type CameraPreset = 'top' | 'perspective' | 'entrance';
+export type CameraPreset = 'top' | 'perspective' | 'entrance' | 'ceiling';
 export type Quality = 'normal' | 'high';
 
 interface UiState {

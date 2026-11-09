@@ -38,6 +38,7 @@ export const sq = {
     edit3dTitle: 'Rregullo në 3D: zgjidh dhe lëviz objektet',
     edit3dHint:
       'Prekni një objekt për ta zgjedhur (Shift shton), tërhiqeni për ta lëvizur. Dekoret mund t’i vendosni edhe në mur ose në tavan: tërhiqini atje. Tërhiqni hapësirën bosh për të rrotulluar pamjen. Mund të tërhiqni edhe nga katalogu direkt në 3D.',
+    lookUp: 'Shiko tavanin',
     rotateLeft: 'Rrotullo −15°',
     rotateRight: 'Rrotullo +15°',
     deselect: 'Hiq zgjedhjen',

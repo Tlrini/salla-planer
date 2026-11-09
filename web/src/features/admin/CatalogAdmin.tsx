@@ -98,7 +98,7 @@ function Row({ item }: { item: CatalogItem }) {
         <input aria-label={sq.admin.name} value={name} onChange={(e) => setName(e.target.value)} />
         <span className="muted small">{sq.categories[item.category]}</span>
       </td>
-      <td className="size-cells">
+      <td data-label={sq.admin.size} className="size-cells">
         <input
           aria-label={`${sq.admin.size} W`}
           className="mono"
@@ -123,7 +123,7 @@ function Row({ item }: { item: CatalogItem }) {
           onChange={(e) => setH(e.target.value)}
         />
       </td>
-      <td>
+      <td data-label={sq.admin.price}>
         <input
           aria-label={sq.admin.price}
           className="mono price-input"
@@ -132,7 +132,7 @@ function Row({ item }: { item: CatalogItem }) {
           onChange={(e) => setPrice(e.target.value)}
         />
       </td>
-      <td>
+      <td data-label={sq.admin.stock}>
         <input
           aria-label={`${sq.admin.stock}: ${item.name}`}
           className="mono price-input"
@@ -142,7 +142,7 @@ function Row({ item }: { item: CatalogItem }) {
           onChange={(e) => setStock(e.target.value)}
         />
       </td>
-      <td>
+      <td data-label={sq.admin.cost}>
         <input
           aria-label={`${sq.admin.cost}: ${item.name}`}
           className="mono price-input"
@@ -152,7 +152,7 @@ function Row({ item }: { item: CatalogItem }) {
           onChange={(e) => setCost(e.target.value)}
         />
       </td>
-      <td>
+      <td data-label={sq.admin.active}>
         <input
           type="checkbox"
           aria-label={sq.admin.active}
@@ -160,7 +160,7 @@ function Row({ item }: { item: CatalogItem }) {
           onChange={(e) => setActive(e.target.checked)}
         />
       </td>
-      <td className="model-cell">
+      <td data-label={sq.admin.model} className="model-cell">
         <span className="small muted">
           {item.modelFile ? item.modelFile.split('/').pop() : sq.admin.noModel}
         </span>
@@ -212,7 +212,7 @@ export function CatalogAdmin() {
   useCatalogVersion();
   return (
     <div className="table-wrap">
-      <table className="admin-table">
+      <table className="admin-table catalog-table">
         <thead>
           <tr>
             <th aria-hidden />

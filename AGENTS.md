@@ -22,8 +22,8 @@ installs the decor. The result can be exported as a PDF (blueprint + 3D image + 
   `web/src/i18n/sq.ts`. Code, comments, and identifiers are in English.
 - **Currency:** EUR (€). Number format: `1.250,00 €` (Albanian/European style).
 - **Units:** meters everywhere in the data model. Show measurements as `12,5 m`.
-- **Devices:** laptop and **tablet with touch** are the main devices. Phone should work but can be
-  cramped.
+- **Devices:** laptop, **tablet with touch** and **phone** are all supported. Test touch at phone
+  (375 px) and tablet width.
 - **Hosting (changed for the beta, approved by the user):** runs in the cloud (AWS or Azure) on
   one small Linux VM with Docker, behind Caddy for HTTPS. Plain cloud infrastructure (VM, disk,
   object storage for backups, an on-demand GPU VM for scanning in Beta 5) is allowed. It must
@@ -455,6 +455,10 @@ presets in `worker/src/plan.ts`, times are estimates until run on a real GPU VM)
 ('salle' | 'tende' | 'skan'): `viewer3d/TentShell.tsx` draws a frame tent (poles are thin `column`
 structure items from `tentPoles`, kept in step by `updateHall`), `viewer3d/ScanShell.tsx` draws
 `Hall.shell`, the scan kept by `finish-hall` as `uploads/models/hall-*.glb`; share links serve it.
+Lighting and touch (2026-11-09): real inverse-square lamps (`viewer3d/lightPlan.ts`), AgX tone
+mapping and variance shadows (`composer.ts`), bounced ceiling light. Catalog drag on touch is a
+long press (`catalog/touchDrag.ts`, views call `registerDropTarget`); HTML5 drag remains for the
+mouse. Below 900 px selecting never opens the properties drawer: `editor/SelectionBar.tsx` does.
 Also added (2026-11-06): editing in 3D (`viewer3d/Edit3D.tsx`, pure picking in
 `viewer3d/picking.ts`, drag preview in `viewer3d/drag3d.ts`); whole-hall scans
 (`scan_jobs.purpose` – migration 8, `POST /api/scans/:id/finish-hall`,

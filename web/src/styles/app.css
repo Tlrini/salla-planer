@@ -170,6 +170,10 @@ button:disabled {
   gap: 4px;
 }
 
+.topbar-break {
+  display: none;
+}
+
 .save-status {
   font-size: 13px;
   color: var(--text-muted);
@@ -649,23 +653,56 @@ button:disabled {
   }
 }
 
-@media (max-width: 560px) {
-  .save-status,
-  .topbar-group {
+@media (max-width: 640px) {
+  .save-status {
     display: none;
   }
 
+  /* Phones: name, save and undo on the first row, the tools on the second. */
   .topbar {
+    flex-wrap: wrap;
     gap: 6px;
     padding: 6px 8px;
   }
 
-  .topbar-title h1 {
-    font-size: 20px;
+  .topbar > * {
+    order: 1;
   }
 
+  .topbar > .topbar-break {
+    display: block;
+    order: 2;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .topbar > .topbar-row2,
+  .topbar > .export-menu {
+    order: 3;
+  }
+
+  .topbar > .segmented.topbar-row2 {
+    flex: 1;
+  }
+
+  .topbar > .segmented.topbar-row2 button {
+    flex: 1;
+  }
+
+  .topbar-title h1 {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 560px) {
+  /* Icons only, but screen readers still get the name. */
   .control-group .text-btn span {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 
@@ -2840,4 +2877,162 @@ a.icon-btn {
   width: 100%;
   justify-content: space-between;
   min-height: 44px;
+}
+
+/* ---------- touch and phones ---------- */
+.catalog-item {
+  -webkit-touch-callout: none;
+  user-select: none;
+  touch-action: pan-y;
+}
+
+.catalog-ghost {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  padding: 6px 10px;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.catalog-ghost span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Only where the properties panel is a drawer. */
+.selection-bar {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .selection-bar {
+    position: absolute;
+    z-index: 6;
+    bottom: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: calc(100% - 24px);
+    padding: 4px 6px;
+    border: 1px solid var(--accent);
+    border-radius: calc(var(--radius) + 4px);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .selection-name {
+    overflow: hidden;
+    padding: 0 6px;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Below the options bar; only the ceiling button, the selection bar does the rest. */
+  .edit3d-bar {
+    top: 72px;
+  }
+
+  .edit3d-bar > .small,
+  .edit3d-bar > .icon-btn:not(:first-child) {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Main menu on its own scrolling row. */
+  .shell-header {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .shell-nav {
+    order: 3;
+    flex: 1 1 100%;
+  }
+
+  .shell-user {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* The selection bar sits above the plan's own tools on a phone. */
+  .selection-bar {
+    bottom: auto;
+    top: 76px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+
+  .selection-name {
+    flex: 1;
+  }
+
+  .edit3d-bar {
+    top: 134px;
+    left: auto;
+    right: 8px;
+    transform: none;
+  }
+
+  /* Catalog admin: one card per item instead of a wide table. */
+  .catalog-table thead {
+    display: none;
+  }
+
+  .catalog-table,
+  .catalog-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .catalog-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .catalog-table td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .catalog-table td input:not([type='checkbox']) {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .catalog-table td[data-label]::before {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: 12px;
+  }
+
+  .catalog-table td:nth-child(2),
+  .catalog-table td.model-cell,
+  .catalog-table td:last-child {
+    grid-column: 1 / -1;
+  }
 }

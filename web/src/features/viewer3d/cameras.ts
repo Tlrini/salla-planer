@@ -1,6 +1,6 @@
 import { nearestWall, type Hall, type Item } from '@salla/shared';
 
-export type CameraPreset = 'top' | 'perspective' | 'entrance';
+export type CameraPreset = 'top' | 'perspective' | 'entrance' | 'ceiling';
 export type Vec3 = [number, number, number];
 
 export const CAMERA_FOV = 45;
@@ -36,6 +36,11 @@ export function cameraFor(
       position: [-W * 0.12, H + size * 0.55, L + size * 0.42],
       target: [W / 2, 0.6, L * 0.45],
     };
+  }
+
+  if (preset === 'ceiling') {
+    // Standing in the room looking up, so decor can be dragged onto the ceiling.
+    return { position: [W / 2, EYE_HEIGHT, L * 0.75], target: [W / 2, H, L * 0.4] };
   }
 
   const door = hall.structure.find((s) => s.type === 'door') ?? { x: W / 2, y: L };
