@@ -3030,7 +3030,25 @@ a.icon-btn {
     font-size: 12px;
   }
 
+  /* Width × depth × height share one full row. */
+  .catalog-table td:nth-child(3) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .catalog-table td:nth-child(3)::before {
+    flex-basis: 100%;
+  }
+
+  .catalog-table td:nth-child(3) input:not([type='checkbox']) {
+    flex: 1;
+    width: 0;
+  }
+
   .catalog-table td:nth-child(2),
+  .catalog-table td:nth-child(3),
   .catalog-table td.model-cell,
   .catalog-table td:last-child {
     grid-column: 1 / -1;
