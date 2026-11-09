@@ -4,10 +4,18 @@ import {
   allowedMounts,
   autoLabels,
   baseHeight,
+  canopySettings,
   clampElevation,
+  defaultSpacing,
   formatEUR,
   formatMeters,
   hasChairs,
+  isCanopy,
+  MAX_ROW_SPACING,
+  MAX_STAR_ARMS,
+  maxCanopySag,
+  MIN_ROW_SPACING,
+  MIN_STAR_ARMS,
   mountPatch,
   normalizeAngle,
   seatCount,
@@ -127,6 +135,7 @@ function SingleItem({ item }: { item: Item }) {
       </div>
 
       <MountField item={item} />
+      {isCanopy(item.type) && <CanopyFields item={item} />}
 
       <div className="field-row">
         {item.mount === 'wall' ? (
@@ -184,7 +193,7 @@ function MountField({ item }: { item: Item }) {
   const items = useEditor((s) => s.project.items);
   const allowed = allowedMounts(cat);
   const current: Mount = item.mount ?? 'floor';
-  if (allowed.length < 2 && current === 'floor') return null;
+  if (allowed.length < 2 && (current === 'floor' || isCanopy(item.type))) return null;
   const h = item.height ?? cat?.height ?? 0;
   const update = (patch: Partial<Item>) => useEditor.getState().updateItems({ [item.id]: patch });
   return (
@@ -224,6 +233,74 @@ function MountField({ item }: { item: Item }) {
           <p className="note">{sq.props.wallRotationHint}</p>
         </>
       )}
+    </>
+  );
+}
+
+/** Ceiling decor: shape, density, how far it hangs, and covering the whole ceiling again. */
+function CanopyFields({ item }: { item: Item }) {
+  const hall = useEditor((s) => s.project.hall);
+  const cat = catalogMap.get(item.type);
+  const update = (patch: Partial<Item>) => useEditor.getState().updateItems({ [item.id]: patch });
+  const { pattern, spacing } = canopySettings(item);
+  const maxSag = maxCanopySag(hall.height);
+  return (
+    <>
+      <div className="field">
+        <span className="field-label">{sq.canopy.pattern}</span>
+        <div className="segmented" role="group" aria-label={sq.canopy.pattern}>
+          {(['rows', 'star'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              aria-pressed={pattern === p}
+              disabled={item.locked}
+              onClick={() =>
+                pattern !== p && update({ canopy: { pattern: p, spacing: defaultSpacing(p) } })
+              }
+            >
+              {sq.canopy.patterns[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="field-row">
+        <NumberField
+          label={pattern === 'rows' ? sq.canopy.rowSpacing : sq.canopy.starArms}
+          value={spacing}
+          decimals={pattern === 'rows' ? 1 : 0}
+          unit={pattern === 'rows' ? 'm' : undefined}
+          min={pattern === 'rows' ? MIN_ROW_SPACING : MIN_STAR_ARMS}
+          max={pattern === 'rows' ? MAX_ROW_SPACING : MAX_STAR_ARMS}
+          onCommit={(v) => v !== undefined && update({ canopy: { pattern, spacing: v } })}
+        />
+        <NumberField
+          label={sq.canopy.sag}
+          value={item.height ?? cat?.height ?? 0.5}
+          unit="m"
+          min={0.05}
+          max={maxSag}
+          onCommit={(v) =>
+            v !== undefined && update({ height: Math.min(maxSag, Math.max(0.05, v)) })
+          }
+        />
+      </div>
+      <button
+        type="button"
+        className="btn"
+        disabled={item.locked}
+        onClick={() =>
+          update({
+            x: hall.width / 2,
+            y: hall.length / 2,
+            width: hall.width,
+            depth: hall.length,
+            rotation: 0,
+          })
+        }
+      >
+        {sq.canopy.fill}
+      </button>
     </>
   );
 }

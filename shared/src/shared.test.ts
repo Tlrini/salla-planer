@@ -4,10 +4,10 @@ import { formatDecimal, formatEUR, formatMeters } from './format.js';
 import { CatalogItem, HallTemplate } from './schemas.js';
 
 describe('catalog defaults', () => {
-  it('all 28 items are valid and unique', () => {
-    expect(DEFAULT_CATALOG).toHaveLength(28);
+  it('all 30 items are valid and unique', () => {
+    expect(DEFAULT_CATALOG).toHaveLength(30);
     for (const c of DEFAULT_CATALOG) CatalogItem.parse(c);
-    expect(new Set(DEFAULT_CATALOG.map((c) => c.id)).size).toBe(28);
+    expect(new Set(DEFAULT_CATALOG.map((c) => c.id)).size).toBe(30);
   });
   it('example halls are valid', () => {
     expect(EXAMPLE_HALLS).toHaveLength(3);

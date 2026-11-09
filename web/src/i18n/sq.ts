@@ -95,6 +95,15 @@ export const sq = {
     elevation: 'Lartësia nga dyshemeja',
     wallRotationHint: 'Në mur objekti kthehet gjithmonë nga salla.',
   },
+  canopy: {
+    listTitle: 'Dekori i tavanit',
+    pattern: 'Forma',
+    patterns: { rows: 'Rreshta', star: 'Yll' },
+    rowSpacing: 'Largësia mes rreshtave',
+    starArms: 'Numri i krahëve',
+    sag: 'Varja',
+    fill: 'Mbulo gjithë tavanin',
+  },
   hall: {
     title: 'Salla',
     name: 'Emri i sallës',

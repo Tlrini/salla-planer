@@ -45,6 +45,13 @@ export const Item = z.object({
   mount: z.enum(['wall', 'ceiling']).optional(),
   /** Wall items: height of the item's bottom edge above the floor (m). */
   elevation: z.number().finite().min(0).max(30).optional(),
+  /**
+   * Ceiling decor that covers an area (see canopy.ts): rows, with `spacing` meters between them,
+   * or a star with `spacing` arms. `height` is how far it hangs down in the middle.
+   */
+  canopy: z
+    .object({ pattern: z.enum(['rows', 'star']), spacing: z.number().finite().positive().max(60) })
+    .optional(),
 });
 export type Item = z.infer<typeof Item>;
 /** Where an item is placed: the floor (default), a wall or the ceiling. */

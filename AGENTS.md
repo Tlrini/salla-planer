@@ -446,6 +446,13 @@ Wall and ceiling decor (2026-11-08): `Item.mount` ('wall' | 'ceiling', missing =
 `mountPatch` in `shared/src/geometry.ts` (wall items face the room, never rotate, never block
 floor/walking); 3D drag onto walls/ceiling via `roomSurfaceHit` (`viewer3d/picking.ts`) and drop
 from the catalog into 3D (`Drop3D` in `viewer3d/Edit3D.tsx`).
+Ceiling decor over an area (2026-11-09): catalog items `ceiling_lights` and `ceiling_drape`,
+`Item.canopy` (`rows` with meters between them, or `star` with a number of arms), `Item.height` is
+how far it hangs; pure geometry in `shared/src/canopy.ts`. Added at full hall size, always ceiling
+mounted. It must never get in the way of the tables: under everything on the plan with only its
+outline tappable (`layerRank` -1, `CanopyShape` in `ItemNode.tsx`), left out of the marquee, picked
+in 3D only when looking up with nothing nearer (`overhead` in `picking.ts`), and listed under
+`Dekori i tavanit` when nothing is selected. Fabric and wires show from below only.
 Scanning upgrades (2026-11-08): a library scan can become the model of a built-in chair or table
 (`POST /api/catalog/:id/model-from-library`, admin; `server/src/modelOptimize.ts` makes a lighter
 copy, 4 000 triangles per chair and 30 000 per table, with @gltf-transform/core,

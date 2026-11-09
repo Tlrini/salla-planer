@@ -1,3 +1,4 @@
+import { isCanopy } from './canopy.js';
 import type { CatalogItem, Hall, Item, Mount } from './schemas.js';
 
 /** Seat spacing for per-length tables (imperial): 1 seat per 0.6 m on each side. */
@@ -471,6 +472,7 @@ const FLOOR_ONLY = new Set([
 
 /** Where a catalog item may be placed: decor can also go on walls and the ceiling. */
 export function allowedMounts(cat: CatalogItem | undefined): Mount[] {
+  if (cat && isCanopy(cat.id)) return ['ceiling'];
   if (!cat || cat.category === 'tables' || cat.category === 'structure' || FLOOR_ONLY.has(cat.id))
     return ['floor'];
   return ['floor', 'wall', 'ceiling'];

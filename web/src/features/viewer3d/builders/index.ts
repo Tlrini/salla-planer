@@ -17,6 +17,8 @@ import { Plant } from './plant';
 import { Chandelier } from './chandelier';
 import { Uplight } from './uplight';
 import { LightCurtain } from './lightCurtain';
+import { CeilingLights } from './ceilingLights';
+import { CeilingDrape } from './ceilingDrape';
 import { PhotoCorner } from './photoCorner';
 import { DjBooth } from './djBooth';
 import { BarCounter } from './barCounter';
@@ -47,6 +49,8 @@ export const BUILDERS: Record<string, Builder> = {
   chandelier: Chandelier,
   uplight: Uplight,
   light_curtain: LightCurtain,
+  ceiling_lights: CeilingLights,
+  ceiling_drape: CeilingDrape,
   photo_corner: PhotoCorner,
   dj_booth: DjBooth,
   bar_counter: BarCounter,

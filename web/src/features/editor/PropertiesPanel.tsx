@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { sq } from '../../i18n/sq';
 import { useEditor } from '../../model/store';
 import { AnnotationProperties } from './AnnotationProperties';
+import { CeilingDecorList } from './CeilingDecorList';
 import { HallSettings } from './HallSettings';
 import { ItemProperties } from './ItemProperties';
 import { ProjectSettings } from './ProjectSettings';
@@ -34,6 +35,7 @@ export function PropertiesPanel({ kind }: { kind: 'project' | 'hall' }) {
   }
   return (
     <>
+      <CeilingDecorList />
       <Summary />
       <ProjectSettings />
       <HallSettings />

@@ -6,7 +6,9 @@ import {
   EXAMPLE_HALLS,
   catalogById,
   clampToHall,
+  defaultCanopy,
   findFreeSpot,
+  isCanopy,
   isTentPole,
   mountPatch,
   tentPoles,
@@ -180,6 +182,19 @@ export const useEditor = create<EditorState>()(
 
       addItem: (type, at, exact = false) => {
         const { project } = get();
+        if (isCanopy(type)) {
+          // Ceiling decor starts over the whole ceiling, wherever it was added or dropped.
+          const { width, length } = project.hall;
+          const item: Item = {
+            ...createItem(type, { x: width / 2, y: length / 2 }),
+            width,
+            depth: length,
+            mount: 'ceiling',
+            canopy: defaultCanopy(type),
+          };
+          set({ project: touch(project, [...project.items, item]), selection: [item.id] });
+          return item.id;
+        }
         const draft = createItem(type, at);
         const pos = exact
           ? clampToHall(draft, project.hall, catalogMap.get(type))
@@ -190,6 +205,7 @@ export const useEditor = create<EditorState>()(
       },
 
       addPlacedItem: (type, mount, at) => {
+        if (isCanopy(type)) return get().addItem(type, at);
         const { project } = get();
         const draft = createItem(type, at);
         const placed = { ...draft, ...mountPatch(draft, mount, project.hall, catalogMap, at) };

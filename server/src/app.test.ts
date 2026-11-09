@@ -172,7 +172,7 @@ describe('internet-facing hardening', () => {
 
 describe('seed', () => {
   it('seeds catalog and example halls', async () => {
-    expect((await req('GET', '/api/catalog', admin)).json()).toHaveLength(28);
+    expect((await req('GET', '/api/catalog', admin)).json()).toHaveLength(30);
     expect((await req('GET', '/api/halls', admin)).json()).toHaveLength(3);
   });
 });

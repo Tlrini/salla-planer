@@ -1,7 +1,14 @@
 import { memo } from 'react';
-import { Circle, Group, Image as KonvaImage, Rect, Text } from 'react-konva';
+import { Circle, Group, Image as KonvaImage, Rect, Text, Line } from 'react-konva';
 import type Konva from 'konva';
-import { chairPositions, decorPositions, type CatalogItem, type Item } from '@salla/shared';
+import {
+  canopyStrands,
+  isCanopy,
+  chairPositions,
+  decorPositions,
+  type CatalogItem,
+  type Item,
+} from '@salla/shared';
 import { BLUEPRINT, CM, FONT_UI, hexToRgba } from './units';
 import { useLoadedImage } from './images';
 
@@ -104,6 +111,49 @@ function TableDecor({
   );
 }
 
+/**
+ * Ceiling decor over an area: only its outline reacts to taps (with a wide hit area for
+ * fingers), so the tables under it stay selectable. The lines hint at the pattern.
+ */
+function CanopyShape({
+  item,
+  stroke,
+  strokeWidth,
+}: {
+  item: Item;
+  stroke: string;
+  strokeWidth: number;
+}) {
+  const w = item.width * CM;
+  const d = item.depth * CM;
+  return (
+    <>
+      {canopyStrands(item).map((s, i) => (
+        <Line
+          key={i}
+          points={[s.a.x * CM, s.a.z * CM, s.b.x * CM, s.b.z * CM]}
+          stroke={hexToRgba(item.color, 0.35)}
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      ))}
+      <Rect
+        x={-w / 2}
+        y={-d / 2}
+        width={w}
+        height={d}
+        fillEnabled={false}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeScaleEnabled={false}
+        hitStrokeWidth={28}
+        dash={[12, 8]}
+      />
+    </>
+  );
+}
+
 function ItemNodeImpl({
   item,
   cat,
@@ -128,7 +178,8 @@ function ItemNodeImpl({
   const fill = topView ? hexToRgba(item.color, 0.08) : hexToRgba(item.color, overhead ? 0.25 : 0.4);
   // Dashed: locked items (long dashes), wall and ceiling decor (short dashes).
   const dash = item.locked ? [10, 6] : item.mount ? [4, 4] : undefined;
-  const text = label ?? (showName ? cat?.name : undefined);
+  const canopy = isCanopy(item.type);
+  const text = canopy ? undefined : (label ?? (showName ? cat?.name : undefined));
   const fontSize = label
     ? Math.max(18, Math.min(w, d) * (decor || decorated ? 0.2 : 0.3))
     : Math.max(14, Math.min(w, d, 400) * 0.14);
@@ -141,31 +192,32 @@ function ItemNodeImpl({
   const hasDecor = !!decor || !!decorated;
   const labelShift = hasDecor && label ? Math.min(w, d) * 0.3 : 0;
 
-  const shape =
-    cat?.shape2d === 'circle' ? (
-      <Circle
-        radius={w / 2}
-        scaleY={d / w}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        strokeScaleEnabled={false}
-        dash={dash}
-      />
-    ) : (
-      <Rect
-        x={-w / 2}
-        y={-d / 2}
-        width={w}
-        height={d}
-        cornerRadius={Math.min(6, w / 4, d / 4)}
-        fill={fill}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        strokeScaleEnabled={false}
-        dash={dash}
-      />
-    );
+  const shape = canopy ? (
+    <CanopyShape item={item} stroke={stroke} strokeWidth={strokeWidth} />
+  ) : cat?.shape2d === 'circle' ? (
+    <Circle
+      radius={w / 2}
+      scaleY={d / w}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      strokeScaleEnabled={false}
+      dash={dash}
+    />
+  ) : (
+    <Rect
+      x={-w / 2}
+      y={-d / 2}
+      width={w}
+      height={d}
+      cornerRadius={Math.min(6, w / 4, d / 4)}
+      fill={fill}
+      stroke={stroke}
+      strokeWidth={strokeWidth}
+      strokeScaleEnabled={false}
+      dash={dash}
+    />
+  );
 
   return (
     <Group

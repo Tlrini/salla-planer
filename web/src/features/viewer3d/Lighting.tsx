@@ -4,7 +4,7 @@ import { useThree } from '@react-three/fiber';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { Hall, Item } from '@salla/shared';
 import { loadedHdri, loadHdri } from './environment';
-import { lampPositions, windowLight } from './lightPlan';
+import { lampColor, lampPositions, windowLight } from './lightPlan';
 import { TONE_MAPPING } from './composer';
 import { WARM_LIGHT } from './resources';
 
@@ -149,7 +149,7 @@ export function Lighting({ hall, items, evening, waitForEnv = false }: Props) {
         <pointLight
           key={i}
           position={p}
-          color={WARM_LIGHT}
+          color={lampColor(items, WARM_LIGHT)}
           intensity={evening ? LAMP_CANDELA.evening : LAMP_CANDELA.day}
           distance={0}
           decay={2}

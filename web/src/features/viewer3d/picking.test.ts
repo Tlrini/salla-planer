@@ -107,3 +107,32 @@ describe('roomSurfaceHit', () => {
     expect(roomSurfaceHit(ray([50, 2, 4], [0, -1, 0]), room)).toBeNull();
   });
 });
+
+describe('picking ceiling decor', () => {
+  const canopy = {
+    id: 'sky',
+    center: { x: 5, y: 3.8, z: 3 },
+    half: { x: 5, y: 0.2, z: 3 },
+    yaw: 0,
+    overhead: true,
+  };
+  const table = { id: 't', center: { x: 5, y: 0.4, z: 3 }, half: { x: 1, y: 0.4, z: 1 }, yaw: 0 };
+  const up: Ray3 = { origin: { x: 5, y: 1.6, z: 3 }, direction: { x: 0, y: 1, z: 0 } };
+
+  it('never takes a tap from above, even over empty floor', () => {
+    expect(pickBox(down(5, 3), [canopy, table])?.id).toBe('t');
+    expect(pickBox(down(8, 5), [canopy, table])).toBeNull();
+  });
+  it('is picked when looking up at it', () => {
+    expect(pickBox(up, [canopy, table])?.id).toBe('sky');
+  });
+  it('gives way to anything else under the pointer', () => {
+    const lamp = {
+      id: 'l',
+      center: { x: 5, y: 3, z: 3 },
+      half: { x: 0.5, y: 0.5, z: 0.5 },
+      yaw: 0,
+    };
+    expect(pickBox(up, [canopy, lamp])?.id).toBe('l');
+  });
+});

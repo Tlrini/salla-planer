@@ -25,6 +25,15 @@ export function lampPositions(
   });
 }
 
+/** With a ceiling of lights and no chandeliers, the room takes the colour of those lights. */
+export function lampColor(
+  items: readonly Pick<Item, 'type' | 'color'>[],
+  fallback: string,
+): string {
+  if (items.some((i) => i.type === 'chandelier')) return fallback;
+  return items.find((i) => i.type === 'ceiling_lights')?.color ?? fallback;
+}
+
 /** Daylight from the wall with the most windows, reaching across the room; null without any. */
 export function windowLight(
   hall: Pick<Hall, 'width' | 'length' | 'height' | 'structure'>,

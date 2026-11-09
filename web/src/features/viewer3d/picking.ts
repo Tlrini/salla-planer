@@ -1,4 +1,4 @@
-import type { CatalogItem, Item, Wall } from '@salla/shared';
+import { isCanopy, type CatalogItem, type Item, type Wall } from '@salla/shared';
 
 /**
  * Picking items in the 3D view (edit in 3D): every item is an oriented box, tested against the
@@ -24,6 +24,8 @@ export interface PickBox {
   half: V3;
   /** Same as the item group's rotation.y in the scene: −rotation (degrees, clockwise) in rad. */
   yaw: number;
+  /** Ceiling decor over a whole area: only picked when looking up at it and nothing is nearer. */
+  overhead?: boolean;
 }
 
 const MIN_HALF_HEIGHT = 0.05;
@@ -52,6 +54,7 @@ export function itemBox(
     center: { x: item.x, y: bottom + halfY, z: item.y },
     half: { x: Math.max(0.05, item.width / 2), y: halfY, z: Math.max(0.05, item.depth / 2) },
     yaw: -item.rotation * DEG,
+    ...(isCanopy(item.type) ? { overhead: true } : {}),
   };
 }
 
@@ -101,8 +104,17 @@ export function pickBox(
 ): { id: string; distance: number; point: V3 } | null {
   let best: { id: string; distance: number } | null = null;
   for (const b of boxes) {
+    if (b.overhead) continue;
     const t = rayBoxDistance(ray, b);
     if (t !== null && (!best || t < best.distance)) best = { id: b.id, distance: t };
+  }
+  // Ceiling decor covers the room: it must never take a tap meant for the floor or a table.
+  if (!best && ray.direction.y > 0) {
+    for (const b of boxes) {
+      if (!b.overhead) continue;
+      const t = rayBoxDistance(ray, b);
+      if (t !== null && (!best || t < best.distance)) best = { id: b.id, distance: t };
+    }
   }
   if (!best) return null;
   const t = best.distance;

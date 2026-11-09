@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lampPositions, MAX_LAMPS, windowLight } from './lightPlan';
+import { lampColor, lampPositions, MAX_LAMPS, windowLight } from './lightPlan';
 
 const hall = { width: 30, length: 18, height: 5, structure: [] };
 
@@ -45,5 +45,18 @@ describe('windowLight', () => {
     const light = windowLight({ ...hall, height: 2.4, structure: [win(29.9, 9)] });
     expect(light!.position[1]).toBeCloseTo(2.1);
     expect(light!.position[0]).toBeCloseTo(29.8);
+  });
+});
+
+describe('lampColor', () => {
+  const lights = { type: 'ceiling_lights', color: '#AACCFF' };
+  it('takes the colour of a ceiling of lights', () => {
+    expect(lampColor([lights], '#FFE2B0')).toBe('#AACCFF');
+  });
+  it('keeps the warm lamps with chandeliers or without ceiling lights', () => {
+    expect(lampColor([lights, { type: 'chandelier', color: '#FFFFFF' }], '#FFE2B0')).toBe(
+      '#FFE2B0',
+    );
+    expect(lampColor([], '#FFE2B0')).toBe('#FFE2B0');
   });
 });

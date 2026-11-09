@@ -286,6 +286,30 @@ export const DEFAULT_CATALOG: CatalogItem[] = [
     defaultColor: '#F3EBDD',
     price: 70,
   }),
+  // ceiling decor that covers an area; resized like any item, the height is how far it hangs
+  def({
+    id: 'ceiling_lights',
+    name: 'Tavan me drita',
+    category: 'lighting',
+    width: 6,
+    depth: 6,
+    height: 0.5,
+    resizable: 'both',
+    defaultColor: '#FFE2B0',
+    price: 0,
+  }),
+  def({
+    id: 'ceiling_drape',
+    name: 'Tavan me perde',
+    category: 'stage',
+    width: 6,
+    depth: 6,
+    height: 0.5,
+    resizable: 'both',
+    defaultColor: '#F7F3EC',
+    defaultColor2: '#C9A44C',
+    price: 0,
+  }),
   // other
   def({
     id: 'photo_corner',
