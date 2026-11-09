@@ -18,6 +18,7 @@ import {
   Sparkles,
   Square,
   Sun,
+  Sunset,
   View,
   X,
 } from 'lucide-react';
@@ -29,6 +30,7 @@ import { useDebounced } from '../../model/useDebounced';
 import { CameraRig } from './CameraRig';
 import { useDrag3d } from './drag3d';
 import { Drop3D, Edit3DControls } from './Edit3D';
+import { isOpenAir, seesSky } from '@salla/shared';
 import { SHADOW_MODE } from './composer';
 import { Effects } from './Effects';
 import { autoViewpoints, CAMERA_FOV, type Pose } from './cameras';
@@ -70,6 +72,7 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
   const selectionCount = useEditor((s) => s.selection.length);
   const catalogVersion = useCatalogVersion();
   const evening = useUi((s) => s.evening);
+  const sunset = useUi((s) => s.sunset);
   const camera = useUi((s) => s.camera);
   const nonce = useUi((s) => s.cameraNonce);
   const walk = useUi((s) => s.walk);
@@ -203,6 +206,7 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
           project={scene}
           catalog={catalogMap}
           evening={evening}
+          sunset={sunset}
           catalogVersion={catalogVersion}
         />
         {quality === 'high' && (
@@ -239,18 +243,20 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
       </Canvas>
       {edit3d && !walk && (
         <div className="edit3d-bar" role="toolbar" aria-label={sq.viewer.edit3dTitle}>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label={sq.viewer.lookUp}
-            title={sq.viewer.lookUp}
-            aria-pressed={camera === 'ceiling'}
-            onClick={() =>
-              set({ camera: 'ceiling', cameraNonce: useUi.getState().cameraNonce + 1 })
-            }
-          >
-            <ArrowUpToLine size={18} />
-          </button>
+          {!isOpenAir(hall) && (
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label={sq.viewer.lookUp}
+              title={sq.viewer.lookUp}
+              aria-pressed={camera === 'ceiling'}
+              onClick={() =>
+                set({ camera: 'ceiling', cameraNonce: useUi.getState().cameraNonce + 1 })
+              }
+            >
+              <ArrowUpToLine size={18} />
+            </button>
+          )}
           {selectionCount > 0 ? (
             <>
               <span className="small">{sq.viewer.selected(selectionCount)}</span>
@@ -300,17 +306,34 @@ export default function Viewer3D({ readOnly = false }: { readOnly?: boolean } = 
           <button
             type="button"
             className="text-btn"
+            aria-label={sq.viewer.day}
+            title={sq.viewer.day}
             aria-pressed={!evening}
             onClick={() => set({ evening: false })}
           >
             <Sun size={18} />
             <span>{sq.viewer.day}</span>
           </button>
+          {seesSky(hall) && (
+            <button
+              type="button"
+              className="text-btn"
+              aria-label={sq.viewer.sunset}
+              title={sq.viewer.sunset}
+              aria-pressed={evening && sunset}
+              onClick={() => set({ evening: true, sunset: true })}
+            >
+              <Sunset size={18} />
+              <span>{sq.viewer.sunset}</span>
+            </button>
+          )}
           <button
             type="button"
             className="text-btn"
-            aria-pressed={evening}
-            onClick={() => set({ evening: true })}
+            aria-label={sq.viewer.evening}
+            title={sq.viewer.evening}
+            aria-pressed={evening && !(sunset && seesSky(hall))}
+            onClick={() => set({ evening: true, sunset: false })}
           >
             <Moon size={18} />
             <span>{sq.viewer.evening}</span>

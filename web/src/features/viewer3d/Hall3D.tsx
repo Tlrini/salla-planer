@@ -1,12 +1,20 @@
-import { Suspense, useEffect, useMemo } from 'react';
+import { Suspense, useEffect, useMemo, type JSX } from 'react';
 import * as THREE from 'three';
-import { WINDOW_SILL, type Hall, type Item } from '@salla/shared';
+import {
+  hasTentFrame,
+  isNaturalGround,
+  seesSky,
+  WINDOW_SILL,
+  type Hall,
+  type Item,
+} from '@salla/shared';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { ScanShell } from './ScanShell';
+import { OutdoorScene } from './OutdoorScene';
 import { TentShell } from './TentShell';
 import { geo, mat } from './resources';
 import { FLOOR_TILE_METERS, floorTextures } from './textures';
-import { tiled, tintToward, usePbr, type PbrName } from './pbrTextures';
+import { groundTint, tiled, tintToward, usePbr, type PbrName } from './pbrTextures';
 
 /** Relief strength per floor: deep plank seams and grout, faint slab joints, soft carpet pile. */
 const FLOOR_BUMP: Record<Hall['floor'], number> = {
@@ -14,6 +22,10 @@ const FLOOR_BUMP: Record<Hall['floor'], number> = {
   mermer: 0.6,
   pllake: 1.6,
   tapet: 0.5,
+  bar: 1,
+  guri: 1,
+  zhavorr: 1,
+  rere: 1,
 };
 
 /** Photo texture set per floor type (the carpet only borrows the velvet pile relief). */
@@ -22,6 +34,10 @@ const FLOOR_PBR: Record<Hall['floor'], PbrName> = {
   mermer: 'marble',
   pllake: 'tiles',
   tapet: 'velvet',
+  bar: 'grass',
+  guri: 'stone',
+  zhavorr: 'gravel',
+  rere: 'sand',
 };
 /** Overall shine on top of each photo's roughness map: polished marble, varnish, glaze. */
 const FLOOR_ROUGHNESS: Record<Hall['floor'], number> = {
@@ -29,6 +45,18 @@ const FLOOR_ROUGHNESS: Record<Hall['floor'], number> = {
   mermer: 0.35,
   pllake: 0.75,
   tapet: 1,
+  bar: 1,
+  guri: 0.9,
+  zhavorr: 1,
+  rere: 1,
+};
+
+/** Plain colours for natural ground while its photo loads. */
+const GROUND_FALLBACK: Partial<Record<Hall['floor'], string>> = {
+  bar: '#5E7337',
+  guri: '#9A948A',
+  zhavorr: '#9C9280',
+  rere: '#CDB98F',
 };
 
 function disposeMaterial(m: THREE.MeshStandardMaterial) {
@@ -49,11 +77,16 @@ function useFloorMaterial(hall: Hall, wait: boolean) {
       const maps = tiled(set, W, L);
       return new THREE.MeshStandardMaterial({
         ...maps,
-        color: tintToward(set, hall.floorColor),
+        color: isNaturalGround(hall.floor)
+          ? groundTint(FLOOR_PBR[hall.floor], set)
+          : tintToward(set, hall.floorColor),
         roughness: FLOOR_ROUGHNESS[hall.floor],
         metalness: 0,
         normalScale: new THREE.Vector2(0.9, 0.9),
       });
+    }
+    if (isNaturalGround(hall.floor)) {
+      return new THREE.MeshStandardMaterial({ color: GROUND_FALLBACK[hall.floor]!, roughness: 1 });
     }
     const tile = FLOOR_TILE_METERS[hall.floor];
     const maps = floorTextures(hall.floor, hall.floorColor);
@@ -259,9 +292,11 @@ export function Hall3D({
     </>
   );
   const kind = hall.kind ?? 'salle';
-  let shell = box;
-  if (kind === 'tende') {
+  let shell: JSX.Element | null = box;
+  if (hasTentFrame(hall)) {
     shell = <TentShell hall={hall} evening={evening} wait={wait} />;
+  } else if (kind === 'jashte') {
+    shell = null;
   } else if (kind === 'skan' && hall.shell) {
     // A missing or broken scan (or one still loading) shows the plain room.
     shell = (
@@ -289,6 +324,7 @@ export function Hall3D({
           receiveShadow
         />
       )}
+      {seesSky(hall) && !scanFloor && <OutdoorScene hall={hall} wait={wait} />}
       {shell}
       {hall.structure.map((s) => (
         <StructureMesh key={s.id} item={s} hall={hall} />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TENT_BAY, tentRoof, type Hall } from '@salla/shared';
 import { geo, mat } from './resources';
@@ -72,6 +72,68 @@ function gablesGeometry(len: number, span: number, rise: number): THREE.BufferGe
 }
 
 /** A white frame tent over the hall's rectangle: fabric walls (or open sides) and a ridge roof. */
+const MULLION_SPACING = 1.25;
+const MULLION = 0.05;
+const MULLION_COLOR = '#D8DCE0';
+
+/** The slim aluminium frame of the glass walls, as one draw call. */
+function GlassFrame({ width, length, height }: { width: number; length: number; height: number }) {
+  const g = geo();
+  const posts = useMemo(() => {
+    const out: Array<[number, number]> = [];
+    const along = (size: number, at: (t: number) => [number, number]) => {
+      const n = Math.max(1, Math.round(size / MULLION_SPACING));
+      for (let i = 0; i <= n; i++) out.push(at((i / n) * size));
+    };
+    along(width, (t) => [t, 0]);
+    along(width, (t) => [t, length]);
+    along(length, (t) => [0, t]);
+    along(length, (t) => [width, t]);
+    return out;
+  }, [width, length]);
+  const ref = useRef<THREE.InstancedMesh>(null);
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    const m = new THREE.Matrix4();
+    posts.forEach(([x, z], i) => {
+      m.makeScale(MULLION, height, MULLION).setPosition(x, height / 2, z);
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [posts, height]);
+  const material = mat('matte', MULLION_COLOR);
+  const rails: Array<{ p: [number, number, number]; s: [number, number, number] }> = [
+    0.04,
+    height,
+  ].flatMap((y) => [
+    {
+      p: [width / 2, y, 0] as [number, number, number],
+      s: [width, 0.08, 0.08] as [number, number, number],
+    },
+    {
+      p: [width / 2, y, length] as [number, number, number],
+      s: [width, 0.08, 0.08] as [number, number, number],
+    },
+    {
+      p: [0, y, length / 2] as [number, number, number],
+      s: [0.08, 0.08, length] as [number, number, number],
+    },
+    {
+      p: [width, y, length / 2] as [number, number, number],
+      s: [0.08, 0.08, length] as [number, number, number],
+    },
+  ]);
+  return (
+    <>
+      <instancedMesh key={posts.length} ref={ref} args={[g.box, material, posts.length]} />
+      {rails.map((r, i) => (
+        <mesh key={i} geometry={g.box} material={material} position={r.p} scale={r.s} />
+      ))}
+    </>
+  );
+}
+
 export function TentShell({
   hall,
   evening,
@@ -86,7 +148,8 @@ export function TentShell({
   const L = hall.length;
   const H = hall.height;
   const { len, span, rise, alongX } = tentRoof(hall);
-  const open = hall.tent?.openSides ?? false;
+  const glass = hall.kind === 'xham';
+  const open = !glass && (hall.tent?.openSides ?? false);
   const fabric = usePbr('fabric', wait);
 
   const geometry = useMemo(
@@ -120,6 +183,21 @@ export function TentShell({
     },
     [cloth],
   );
+
+  // Floor-to-roof glass: it hides nothing from outside.
+  const pane = useMemo(
+    () =>
+      // Unlit on purpose: on a lit pane every lamp would show as a white dot.
+      new THREE.MeshBasicMaterial({
+        color: evening ? '#74848F' : '#E6F0F4',
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+      }),
+    [evening],
+  );
+  useEffect(() => () => pane.dispose(), [pane]);
+  const wallMaterial = glass ? pane : cloth;
 
   // Ridge along world x, or along world z (local x → world z, local z → world −x).
   const roofFrame = alongX
@@ -155,20 +233,21 @@ export function TentShell({
         rotation={[0, roofFrame.rotation, 0]}
       >
         <mesh geometry={geometry.roof} material={cloth} />
-        <mesh geometry={geometry.gables} material={cloth} />
+        <mesh geometry={geometry.gables} material={wallMaterial} />
       </group>
       {!open &&
         walls.map((w, i) => (
           <mesh
             key={i}
             geometry={g.plane}
-            material={cloth}
+            material={wallMaterial}
             position={w.position}
             rotation={[0, w.rotation, 0]}
             scale={[w.width, H, 1]}
             receiveShadow
           />
         ))}
+      {glass && <GlassFrame width={W} length={L} height={H} />}
       {open &&
         rolls.map((r, i) => (
           <mesh

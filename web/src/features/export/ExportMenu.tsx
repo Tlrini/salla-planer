@@ -29,11 +29,11 @@ export function ExportMenu() {
     try {
       const ex = await import('./exporter');
       const project = useEditor.getState().project;
-      const { evening, camera } = useUi.getState();
-      if (job === 'pdf') await ex.exportPdf(project, evening);
+      const { evening, sunset, camera } = useUi.getState();
+      if (job === 'pdf') await ex.exportPdf(project, evening, sunset);
       else if (job === 'plan') await ex.exportPlanPng(project);
-      else if (job === '360') await ex.export360(project, evening, useUi.getState().walk);
-      else await ex.export3dPng(project, camera, evening);
+      else if (job === '360') await ex.export360(project, evening, useUi.getState().walk, sunset);
+      else await ex.export3dPng(project, camera, evening, sunset);
     } catch (err) {
       console.error(err);
       setError(true);

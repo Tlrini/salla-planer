@@ -4,6 +4,7 @@ import type Konva from 'konva';
 import {
   canopyStrands,
   isCanopy,
+  isCover,
   chairPositions,
   decorPositions,
   type CatalogItem,
@@ -154,6 +155,50 @@ function CanopyShape({
   );
 }
 
+/** A small tent or parasol: an outline with fold lines; tables underneath stay selectable. */
+function CoverShape({
+  item,
+  round,
+  stroke,
+  width,
+}: {
+  item: Item;
+  round: boolean;
+  stroke: string;
+  width: number;
+}) {
+  const w = item.width * CM;
+  const d = item.depth * CM;
+  const common = {
+    fillEnabled: false,
+    stroke,
+    strokeWidth: width,
+    strokeScaleEnabled: false,
+    hitStrokeWidth: 28,
+    dash: [12, 8],
+  };
+  if (round) return <Circle radius={w / 2} scaleY={d / w} {...common} />;
+  const folds = [
+    [-w / 2, -d / 2, w / 2, d / 2],
+    [w / 2, -d / 2, -w / 2, d / 2],
+  ];
+  return (
+    <>
+      {folds.map((points, i) => (
+        <Line
+          key={i}
+          points={points}
+          stroke={hexToRgba(item.color, 0.35)}
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      ))}
+      <Rect x={-w / 2} y={-d / 2} width={w} height={d} {...common} />
+    </>
+  );
+}
+
 function ItemNodeImpl({
   item,
   cat,
@@ -194,6 +239,8 @@ function ItemNodeImpl({
 
   const shape = canopy ? (
     <CanopyShape item={item} stroke={stroke} strokeWidth={strokeWidth} />
+  ) : isCover(item.type) ? (
+    <CoverShape item={item} round={cat?.shape2d === 'circle'} stroke={stroke} width={strokeWidth} />
   ) : cat?.shape2d === 'circle' ? (
     <Circle
       radius={w / 2}

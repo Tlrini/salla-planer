@@ -453,6 +453,14 @@ mounted. It must never get in the way of the tables: under everything on the pla
 outline tappable (`layerRank` -1, `CanopyShape` in `ItemNode.tsx`), left out of the marquee, picked
 in 3D only when looking up with nothing nearer (`overhead` in `picking.ts`), and listed under
 `Dekori i tavanit` when nothing is selected. Fabric and wires show from below only.
+Outdoor events (2026-11-09): `Hall.kind` also 'jashte' (open air) and 'xham' (glass pavilion: a
+tent frame with floor-to-roof glass, an inside place that sees out); `Hall.outdoor` for a scanned
+outdoor place; rules in `shared/src/outdoor.ts` (`isOpenAir`, `isOutdoor`, `seesSky`, `hasTentFrame`,
+`groundOptions`, `catalogFor`, `canopyPoles`). Ground types `bar`, `guri`, `zhavorr`, `rere` keep
+their photo colour (`isNaturalGround`). Sky and sun: `lightPlan.ts` (`SKY_LIGHT`, `sunPlan`,
+`Ui.sunset` adds Perëndim where the sky shows), `Lighting.tsx` sets the background, CC0 skies in
+`web/public/env/sky_*`, land around the place in `viewer3d/OutdoorScene.tsx`. Covers `gazebo`,
+`pergola`, `parasol` follow the overhead rules (`isOverhead`), roofs show from below only.
 Scanning upgrades (2026-11-08): a library scan can become the model of a built-in chair or table
 (`POST /api/catalog/:id/model-from-library`, admin; `server/src/modelOptimize.ts` makes a lighter
 copy, 4 000 triangles per chair and 30 000 per table, with @gltf-transform/core,

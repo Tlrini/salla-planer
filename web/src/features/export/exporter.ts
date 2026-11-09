@@ -59,7 +59,11 @@ async function loadAgency(): Promise<AgencySettings> {
   return agency;
 }
 
-export async function exportPdf(project: Project, evening: boolean): Promise<string> {
+export async function exportPdf(
+  project: Project,
+  evening: boolean,
+  sunset = false,
+): Promise<string> {
   await loadAgency();
   const { hall, items } = plan(project);
   const eyes = eyeViewpoints(project);
@@ -67,6 +71,7 @@ export async function exportPdf(project: Project, evening: boolean): Promise<str
     renderBlueprint(hall, items, catalogMap, { annotations: project.annotations }),
     render3d(hall, items, catalogMap, ['perspective', 'entrance', ...eyes.map((e) => e.pose)], {
       evening,
+      sunset,
     }),
     loadPdfFonts(),
   ]);
@@ -80,7 +85,10 @@ export async function exportPdf(project: Project, evening: boolean): Promise<str
     );
     options = [];
     for (const o of all.slice(0, 4)) {
-      const [url] = await render3d(hall, o.items, catalogMap, ['perspective'], { evening });
+      const [url] = await render3d(hall, o.items, catalogMap, ['perspective'], {
+        evening,
+        sunset,
+      });
       const s = summarize(o.items, catalog);
       options.push({
         url: url!,
@@ -124,9 +132,14 @@ export async function export3dPng(
   project: Project,
   preset: CameraPreset,
   evening: boolean,
+  sunset = false,
 ): Promise<void> {
   const { hall, items } = plan(project);
-  const [url] = await render3d(hall, items, catalogMap, [preset], { evening, mime: 'image/png' });
+  const [url] = await render3d(hall, items, catalogMap, [preset], {
+    evening,
+    sunset,
+    mime: 'image/png',
+  });
   download(url!, pdfFileName(project).replace(/\.pdf$/, '-3d.png'));
 }
 
@@ -134,11 +147,23 @@ export async function export3dPng(
  * 360° panorama JPEG (with photo-sphere metadata) from where the visitor stands in walk mode,
  * or from the entrance.
  */
-export async function export360(project: Project, evening: boolean, fromWalk: boolean) {
+export async function export360(
+  project: Project,
+  evening: boolean,
+  fromWalk: boolean,
+  sunset = false,
+) {
   const { hall, items } = plan(project);
   const wanted = (fromWalk && walkState.last) || autoViewpoints(hall, items)[0]!.pose;
   const spot = walkTarget(wanted, walkArea(hall, items, catalogMap)) ?? wanted;
-  const url = await renderPanorama(hall, items, catalogMap, { ...wanted, ...spot }, evening);
+  const url = await renderPanorama(
+    hall,
+    items,
+    catalogMap,
+    { ...wanted, ...spot },
+    evening,
+    sunset,
+  );
   const bytes = withXmp(dataUrlBytes(url), panoramaXmp(PANO_WIDTH, PANO_HEIGHT));
   const blobUrl = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/jpeg' }));
   download(blobUrl, pdfFileName(project).replace(/\.pdf$/, '-360.jpg'));

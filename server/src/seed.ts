@@ -54,6 +54,17 @@ export function seed(db: DB, opts: SeedOptions): void {
     )();
   }
 
+  // Older databases get the garden example once; if it is deleted later it stays deleted.
+  const garden = EXAMPLE_HALLS.find((h) => h.id === 'example_garden');
+  if (garden && !db.prepare("SELECT 1 FROM settings WHERE key = 'seeded_garden'").get()) {
+    db.transaction(() => {
+      db.prepare(
+        'INSERT OR IGNORE INTO halls (id, example, hall, created_at, updated_at) VALUES (?, 1, ?, ?, ?)',
+      ).run(garden.id, JSON.stringify(garden.hall), now, now);
+      db.prepare("INSERT INTO settings (key, value) VALUES ('seeded_garden', 'true')").run();
+    })();
+  }
+
   const userCount = (db.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
   if (userCount === 0) {
     let username = opts.adminUser;

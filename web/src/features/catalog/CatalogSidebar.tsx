@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Search, WandSparkles } from 'lucide-react';
-import { formatEUR, type CatalogCategory } from '@salla/shared';
+import { catalogFor, formatEUR, type CatalogCategory } from '@salla/shared';
 import { sq } from '../../i18n/sq';
 import { catalog, useCatalogVersion, useEditor } from '../../model/store';
 import { useUi } from '../../model/ui';
@@ -22,6 +22,7 @@ export function foldText(s: string): string {
 
 export function CatalogSidebar({ kind }: { kind: 'project' | 'hall' }) {
   useCatalogVersion();
+  const hall = useEditor((s) => s.project.hall);
   const categories = kind === 'hall' ? HALL_CATEGORIES : PROJECT_CATEGORIES;
   const [layoutOpen, setLayoutOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -42,7 +43,9 @@ export function CatalogSidebar({ kind }: { kind: 'project' | 'hall' }) {
     ...categories.map((category) => ({
       key: category,
       title: sq.categories[category],
-      entries: catalog.filter((c) => c.category === category && c.active && c.source !== 'library'),
+      entries: catalogFor(catalog, hall).filter(
+        (c) => c.category === category && c.active && c.source !== 'library',
+      ),
     })),
   ];
   // A drag in progress must not scroll the list. The listener has to exist before the touch

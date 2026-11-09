@@ -1,11 +1,11 @@
-import { isCanopy } from '@salla/shared';
+import { isOverhead } from '@salla/shared';
 import { sq } from '../../i18n/sq';
 import { catalogMap, useEditor } from '../../model/store';
 
 /** Direct way to select ceiling decor, which only its outline can do on the plan. */
 export function CeilingDecorList() {
   const items = useEditor((s) => s.project.items);
-  const canopies = items.filter((i) => isCanopy(i.type));
+  const canopies = items.filter((i) => isOverhead(i.type));
   if (!canopies.length) return null;
   return (
     <section className="panel-section">

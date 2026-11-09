@@ -14,6 +14,10 @@ export const PBR_SETS = {
   plaster: { dir: 'plastered_wall_04', tile: 3.2, color: false },
   fabric: { dir: 'fabric_pattern_07', tile: 0.4, color: false },
   velvet: { dir: 'velour_velvet', tile: 0.28, color: false },
+  grass: { dir: 'leafy_grass', tile: 2.5, color: true },
+  stone: { dir: 'stone_tiles_02', tile: 2, color: true },
+  gravel: { dir: 'sandy_gravel', tile: 2.1, color: true },
+  sand: { dir: 'coast_sand_01', tile: 6, color: true },
 } as const;
 export type PbrName = keyof typeof PBR_SETS;
 
@@ -121,6 +125,14 @@ export function tiled(
     normalMap: rep(set.normalMap)!,
     roughnessMap: rep(set.roughnessMap)!,
   };
+}
+
+/** The grass photo is a dry lawn; this is the colour it takes for a garden. */
+const LAWN = '#5C8236';
+
+/** Natural ground shows its photo as it is, except grass, which is made a healthy green. */
+export function groundTint(name: PbrName, set: PbrSet): THREE.Color {
+  return name === 'grass' ? tintToward(set, LAWN) : new THREE.Color('#FFFFFF');
 }
 
 /**

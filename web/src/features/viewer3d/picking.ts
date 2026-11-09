@@ -1,4 +1,11 @@
-import { isCanopy, type CatalogItem, type Item, type Wall } from '@salla/shared';
+import {
+  isOpenAir,
+  isOverhead,
+  type CatalogItem,
+  type Hall,
+  type Item,
+  type Wall,
+} from '@salla/shared';
 
 /**
  * Picking items in the 3D view (edit in 3D): every item is an oriented box, tested against the
@@ -54,7 +61,7 @@ export function itemBox(
     center: { x: item.x, y: bottom + halfY, z: item.y },
     half: { x: Math.max(0.05, item.width / 2), y: halfY, z: Math.max(0.05, item.depth / 2) },
     yaw: -item.rotation * DEG,
-    ...(isCanopy(item.type) ? { overhead: true } : {}),
+    ...(isOverhead(item.type) ? { overhead: true } : {}),
   };
 }
 
@@ -155,7 +162,7 @@ const EPS = 1e-6;
  */
 export function roomSurfaceHit(
   ray: Ray3,
-  hall: { width: number; length: number; height: number },
+  hall: Pick<Hall, 'width' | 'length' | 'height' | 'kind' | 'outdoor'>,
 ): SurfaceHit | null {
   const { origin: o, direction: d } = ray;
   const W = hall.width;
@@ -181,10 +188,13 @@ export function roomSurfaceHit(
   };
   plane('floor', undefined, 'y', 0, false);
   plane('ceiling', undefined, 'y', H, true);
-  plane('wall', 'top', 'z', 0, false);
-  plane('wall', 'bottom', 'z', L, true);
-  plane('wall', 'left', 'x', 0, false);
-  plane('wall', 'right', 'x', W, true);
+  // In the open air only the plane of the hung lights remains.
+  if (!isOpenAir(hall)) {
+    plane('wall', 'top', 'z', 0, false);
+    plane('wall', 'bottom', 'z', L, true);
+    plane('wall', 'left', 'x', 0, false);
+    plane('wall', 'right', 'x', W, true);
+  }
   if (!candidates.length) return null;
   const best = candidates.reduce((a, b) => (b.t < a.t ? b : a));
   const t = best.t;

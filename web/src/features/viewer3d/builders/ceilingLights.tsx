@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { canopyLights, canopyStrands, sagAt, strandLength } from '@salla/shared';
 import { glowTexture } from '../textures';
+import { CanopyPoles } from './canopyPoles';
 import { heightOf, type BuilderProps } from './types';
 
 const WIRE_STEP = 0.5;
 const WIRE_COLOR = '#3A3A36';
 
 /** Strings of lights across the ceiling: thin wires plus one point cloud of glowing bulbs. */
-export function CeilingLights({ item, cat, evening }: BuilderProps) {
+export function CeilingLights({ item, cat, hall, evening }: BuilderProps) {
   const h = heightOf(item, cat);
   const { width, depth, type, canopy } = item;
 
@@ -77,6 +78,7 @@ export function CeilingLights({ item, cat, evening }: BuilderProps) {
         }}
       />
       <points geometry={geometry.points} material={material} renderOrder={3} />
+      <CanopyPoles item={item} hall={hall} top={h} />
     </group>
   );
 }

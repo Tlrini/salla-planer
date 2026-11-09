@@ -73,7 +73,7 @@ export function placementFor(
   snapOn: boolean,
 ): { mount: Mount; patch: DragPatch } | null {
   const cat = catalog.get(item.type);
-  const allowed = allowedMounts(cat);
+  const allowed = allowedMounts(cat, hall);
   const s = (v: number) => (snapOn ? snap(v, GRID) : v);
   const hit = roomSurfaceHit(ray, hall);
   if (hit?.surface === 'wall' && allowed.includes('wall')) {
@@ -174,7 +174,7 @@ export function Edit3DControls({ hall, items, catalog }: Props) {
         planeY: hit.point.y,
         grab,
         origins,
-        surface: !!only && allowedMounts(catalog.get(only.type)).length > 1,
+        surface: !!only && allowedMounts(catalog.get(only.type), latest.current.hall).length > 1,
         moved: false,
         last: null,
       };

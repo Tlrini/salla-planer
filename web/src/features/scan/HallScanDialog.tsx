@@ -243,7 +243,7 @@ function HallForm({
   const [height, setHeight] = useState(4);
   const [name, setName] = useState(job.name);
   const [fit, setFit] = useState<Fit | null>(null);
-  const [scanned, setScanned] = useState<'hall' | 'tent' | 'other'>('hall');
+  const [scanned, setScanned] = useState<'hall' | 'tent' | 'outside' | 'other'>('hall');
   const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle');
   const [failed, setFailed] = useState(false);
 
@@ -285,6 +285,7 @@ function HallForm({
         shell: { url: url, turn, scale: fit.scale, offset: fit.offset },
         // A scanned tent can also be switched to the drawn tent in the hall settings.
         ...(scanned === 'tent' ? { tent: { openSides: false } } : {}),
+        ...(scanned === 'outside' ? { outdoor: true } : {}),
         underlay: {
           url: planUrl,
           x: 0,
@@ -384,7 +385,7 @@ function HallForm({
         <div className="field">
           <span className="field-label">{sq.scan.hallKind}</span>
           <div className="segmented" role="group" aria-label={sq.scan.hallKind}>
-            {(['hall', 'tent', 'other'] as const).map((k) => (
+            {(['hall', 'tent', 'outside', 'other'] as const).map((k) => (
               <button
                 key={k}
                 type="button"

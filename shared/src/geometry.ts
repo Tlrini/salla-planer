@@ -1,4 +1,5 @@
 import { isCanopy } from './canopy.js';
+import { isCover, isOpenAir } from './outdoor.js';
 import type { CatalogItem, Hall, Item, Mount } from './schemas.js';
 
 /** Seat spacing for per-length tables (imperial): 1 seat per 0.6 m on each side. */
@@ -184,6 +185,9 @@ const LAYERED_TYPES = new Set([
   'chandelier',
   'centerpiece',
   'candle_group',
+  'gazebo',
+  'pergola',
+  'parasol',
 ]);
 
 /**
@@ -471,8 +475,12 @@ const FLOOR_ONLY = new Set([
 ]);
 
 /** Where a catalog item may be placed: decor can also go on walls and the ceiling. */
-export function allowedMounts(cat: CatalogItem | undefined): Mount[] {
+export function allowedMounts(
+  cat: CatalogItem | undefined,
+  place: Pick<Hall, 'kind' | 'outdoor'> = {},
+): Mount[] {
   if (cat && isCanopy(cat.id)) return ['ceiling'];
+  if (isOpenAir(place) || (cat && isCover(cat.id))) return ['floor'];
   if (!cat || cat.category === 'tables' || cat.category === 'structure' || FLOOR_ONLY.has(cat.id))
     return ['floor'];
   return ['floor', 'wall', 'ceiling'];
@@ -562,7 +570,14 @@ export const AISLE = 1.2;
 export const MIN_AISLE = 0.9;
 
 /** Overhead / table-top items never block floor space. */
-const NON_BLOCKING = new Set(['chandelier', 'centerpiece', 'candle_group']);
+const NON_BLOCKING = new Set([
+  'chandelier',
+  'centerpiece',
+  'candle_group',
+  'gazebo',
+  'pergola',
+  'parasol',
+]);
 
 /**
  * Place `count` tables of `type` in a grid over the free floor, keeping `aisle` meters between

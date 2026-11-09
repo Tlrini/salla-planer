@@ -85,10 +85,12 @@ export async function render3d(
   presets: RenderView[],
   {
     evening = false,
+    sunset = false,
     mime = 'image/jpeg',
     effects = true,
   }: {
     evening?: boolean;
+    sunset?: boolean;
     mime?: 'image/png' | 'image/jpeg';
     /** Ambient occlusion, evening bloom and edge smoothing, as in "E lartë". */
     effects?: boolean;
@@ -116,6 +118,7 @@ export async function render3d(
             project={{ hall, items: [...items] }}
             catalog={catalog}
             evening={evening}
+            sunset={sunset}
             waitForModels
           />
           <Capture

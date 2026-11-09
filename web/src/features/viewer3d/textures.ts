@@ -54,6 +54,10 @@ export const FLOOR_TILE_METERS: Record<FloorType, number> = {
   mermer: 6,
   pllake: 4,
   tapet: 3,
+  bar: 2.5,
+  guri: 2,
+  zhavorr: 2.1,
+  rere: 6,
 };
 
 /** The three maps of a floor: colour, relief (bump) and roughness. Same layout in all three. */

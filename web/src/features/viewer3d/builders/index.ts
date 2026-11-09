@@ -19,6 +19,9 @@ import { Uplight } from './uplight';
 import { LightCurtain } from './lightCurtain';
 import { CeilingLights } from './ceilingLights';
 import { CeilingDrape } from './ceilingDrape';
+import { Gazebo } from './gazebo';
+import { Pergola } from './pergola';
+import { Parasol } from './parasol';
 import { PhotoCorner } from './photoCorner';
 import { DjBooth } from './djBooth';
 import { BarCounter } from './barCounter';
@@ -51,6 +54,9 @@ export const BUILDERS: Record<string, Builder> = {
   light_curtain: LightCurtain,
   ceiling_lights: CeilingLights,
   ceiling_drape: CeilingDrape,
+  gazebo: Gazebo,
+  pergola: Pergola,
+  parasol: Parasol,
   photo_corner: PhotoCorner,
   dj_booth: DjBooth,
   bar_counter: BarCounter,

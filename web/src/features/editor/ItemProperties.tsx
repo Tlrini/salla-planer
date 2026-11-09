@@ -191,7 +191,7 @@ function MountField({ item }: { item: Item }) {
   const cat = catalogMap.get(item.type);
   const hall = useEditor((s) => s.project.hall);
   const items = useEditor((s) => s.project.items);
-  const allowed = allowedMounts(cat);
+  const allowed = allowedMounts(cat, hall);
   const current: Mount = item.mount ?? 'floor';
   if (allowed.length < 2 && (current === 'floor' || isCanopy(item.type))) return null;
   const h = item.height ?? cat?.height ?? 0;

@@ -3,7 +3,17 @@ import { z } from 'zod';
 const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Expected a #RRGGBB color');
 const meters = z.number().finite().nonnegative();
 
-export const FloorType = z.enum(['parket', 'mermer', 'pllake', 'tapet']);
+export const FloorType = z.enum([
+  'parket',
+  'mermer',
+  'pllake',
+  'tapet',
+  // Outdoor ground (see outdoor.ts).
+  'bar',
+  'guri',
+  'zhavorr',
+  'rere',
+]);
 export type FloorType = z.infer<typeof FloorType>;
 
 export const EventType = z.enum(['dasme', 'fejese', 'event_kompanie', 'ditelindje', 'tjeter']);
@@ -184,7 +194,7 @@ export const Underlay = z.object({
 export type Underlay = z.infer<typeof Underlay>;
 
 /** The kind of room drawn in 3D; the plan is always the width × length rectangle. */
-export const HallKind = z.enum(['salle', 'tende', 'skan']);
+export const HallKind = z.enum(['salle', 'tende', 'skan', 'jashte', 'xham']);
 export type HallKind = z.infer<typeof HallKind>;
 
 /** A scanned room used as the hall's 3D shell, and how to place it (see scan/HallScanDialog). */
@@ -216,6 +226,8 @@ export const Hall = z.object({
   shell: HallShell.optional(),
   /** Tent options; `openSides` rolls up the fabric walls. */
   tent: z.object({ openSides: z.boolean() }).optional(),
+  /** Scans only: the scanned place is outside, so it gets a sky and the sun. */
+  outdoor: z.boolean().optional(),
 });
 export type Hall = z.infer<typeof Hall>;
 

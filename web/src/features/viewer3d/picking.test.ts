@@ -136,3 +136,14 @@ describe('picking ceiling decor', () => {
     expect(pickBox(up, [canopy, lamp])?.id).toBe('l');
   });
 });
+
+describe('room surfaces in the open air', () => {
+  const garden = { width: 10, length: 6, height: 4, kind: 'jashte' as const };
+  const room = { width: 10, length: 6, height: 4 };
+  const sideways: Ray3 = { origin: { x: 5, y: 1.6, z: 3 }, direction: { x: 1, y: 0, z: 0 } };
+
+  it('has no walls to hit', () => {
+    expect(roomSurfaceHit(sideways, room)?.surface).toBe('wall');
+    expect(roomSurfaceHit(sideways, garden)).toBeNull();
+  });
+});

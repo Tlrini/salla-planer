@@ -4,7 +4,7 @@ import { Layer, Rect, Stage } from 'react-konva';
 import {
   autoLabels,
   boxesOverlap,
-  isCanopy,
+  isOverhead,
   clampToHall,
   halfExtents,
   isTabletop,
@@ -299,7 +299,7 @@ export function BlueprintStage() {
       return;
     }
     const hit = state.project.items
-      .filter((i) => !isCanopy(i.type))
+      .filter((i) => !isOverhead(i.type))
       .filter((i) => boxesOverlap(box, itemBox(i, catalogMap.get(i.type)), 0))
       .map((i) => i.id);
     state.setSelection(g.additive ? [...new Set([...state.selection, ...hit])] : hit);

@@ -7,3 +7,11 @@ floor_tiles_06       3,0 m tile  Rob Tuytel
 plastered_wall_04    3,2 m tile  Rob Tuytel
 fabric_pattern_07    0,4 m tile  Rob Tuytel
 velour_velvet        0,28 m tile colormass, Rico Cilliers
+leafy_grass          2,5 m tile  Charlotte Baglioni
+stone_tiles_02       2,0 m tile  Charlotte Baglioni
+sandy_gravel         2,1 m tile  Charlotte Baglioni
+coast_sand_01        6,0 m tile  Rob Tuytel
+
+Outdoor skies in web/public/env (sky_day, sky_sunset, sky_night), Poly Haven, CC0:
+Qwantani Afternoon, Qwantani Sunset, Qwantani Night, by Greg Zaal and Jarod Guest.
+The .hdr files are the 1k versions; the .jpg files are the tonemapped photos scaled to 4096 x 2048.

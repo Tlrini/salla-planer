@@ -8,10 +8,13 @@ import {
   clampToHall,
   defaultCanopy,
   findFreeSpot,
+  hasTentFrame,
   isCanopy,
+  isOpenAir,
   isTentPole,
   mountPatch,
   tentPoles,
+  toOpenAirItems,
   normalizeAngle,
   snap,
   type CatalogItem,
@@ -292,14 +295,19 @@ export const useEditor = create<EditorState>()(
       updateHall: (patch) => {
         const { project, meta } = get();
         const hall = { ...project.hall, ...patch };
-        const isTent = hall.kind === 'tende';
-        const wasTent = project.hall.kind === 'tende';
+        const isTent = hasTentFrame(hall);
+        const wasTent = hasTentFrame(project.hall);
         const resized = patch.width || patch.length || patch.height;
         let items = project.items;
+        if (isOpenAir(hall) && !isOpenAir(project.hall)) {
+          // No walls or ceiling any more: all in this one undo step.
+          items = toOpenAirItems(items);
+          hall.structure = toOpenAirItems(hall.structure);
+        }
         if (isTent !== wasTent || (isTent && resized)) {
           // The tent's poles follow its size. In the hall editor the items are the structure.
           const inTemplate = meta?.kind === 'hall';
-          const base = inTemplate ? project.items : hall.structure;
+          const base = inTemplate ? items : hall.structure;
           const next = [...base.filter((i) => !isTentPole(i)), ...(isTent ? tentPoles(hall) : [])];
           if (inTemplate) items = next;
           else hall.structure = next;

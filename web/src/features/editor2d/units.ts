@@ -1,4 +1,4 @@
-import { isCanopy } from '@salla/shared';
+import { isOverhead } from '@salla/shared';
 
 /** Konva works in centimeters: 1 unit = 1 cm. The data model is in meters. */
 export const CM = 100;
@@ -28,8 +28,8 @@ export function hexToRgba(hex: string, alpha: number): string {
 
 /** Draw order: floor coverings first, ceiling items last. */
 export function layerRank(type: string, mount?: 'wall' | 'ceiling'): number {
-  // A ceiling covered with decor spans the room: it must stay under the tables.
-  if (isCanopy(type)) return -1;
+  // Ceiling decor and small tents spread over the guests: they must stay under the tables.
+  if (isOverhead(type)) return -1;
   // Ceiling decor is drawn over everything so it can still be picked above tables.
   if (mount === 'ceiling') return 4;
   if (type === 'dance_floor' || type === 'carpet_aisle') return 0;

@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import * as THREE from 'three';
 import { canopyPanels, canopySettings, sagAt, type Panel } from '@salla/shared';
 import { mat } from '../resources';
+import { CanopyPoles } from './canopyPoles';
 import { heightOf, type BuilderProps } from './types';
 
 const FOLD_DEPTH = 0.035;
@@ -53,7 +54,7 @@ function addPanel(p: Panel, h: number, positions: number[], indices: number[], u
 }
 
 /** Fabric draped across the ceiling, in strips or as a star gathered at a rosette. */
-export function CeilingDrape({ item, cat, evening }: BuilderProps) {
+export function CeilingDrape({ item, cat, hall, evening }: BuilderProps) {
   const h = heightOf(item, cat);
   const { width, depth, type, canopy } = item;
   const isStar = canopySettings({ type, canopy }).pattern === 'star';
@@ -89,6 +90,7 @@ export function CeilingDrape({ item, cat, evening }: BuilderProps) {
   return (
     <group>
       <mesh geometry={geometry} material={material} receiveShadow />
+      <CanopyPoles item={item} hall={hall} top={h} />
       {isStar && (
         // Faces down only, so it does not float in the view from above.
         <mesh

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { lampColor, lampPositions, MAX_LAMPS, windowLight } from './lightPlan';
+import {
+  bounceColor,
+  lampColor,
+  lampPositions,
+  MAX_LAMPS,
+  skyName,
+  sunPlan,
+  windowLight,
+} from './lightPlan';
 
 const hall = { width: 30, length: 18, height: 5, structure: [] };
 
@@ -58,5 +66,48 @@ describe('lampColor', () => {
       '#FFE2B0',
     );
     expect(lampColor([], '#FFE2B0')).toBe('#FFE2B0');
+  });
+});
+
+describe('outdoor light', () => {
+  const garden = { width: 30, length: 20, height: 4, kind: 'jashte' as const };
+  const glass = { ...garden, kind: 'xham' as const };
+
+  it('names the sky from the two switches', () => {
+    expect(skyName(false, true)).toBe('day');
+    expect(skyName(true, true)).toBe('sunset');
+    expect(skyName(true, false)).toBe('night');
+  });
+
+  it('keeps the sun above the ground and lowest at sunset', () => {
+    const [day, sunset] = [sunPlan(garden, 'day'), sunPlan(garden, 'sunset')];
+    expect(sunset.position[1]).toBeGreaterThan(0);
+    expect(sunset.position[1]).toBeLessThan(day.position[1]);
+    expect(sunPlan(garden, 'night').intensity).toBeLessThan(day.intensity / 5);
+  });
+
+  it('gives a roofed place less direct sun', () => {
+    expect(sunPlan(glass, 'day').intensity).toBeLessThan(sunPlan(garden, 'day').intensity);
+  });
+
+  it('has no hidden room lamps in the open air', () => {
+    expect(lampPositions(garden, [])).toEqual([]);
+    expect(lampPositions(garden, [{ type: 'plant', x: 1, y: 1 }])).toEqual([]);
+    expect(lampPositions(glass, []).length).toBeGreaterThan(0);
+  });
+
+  it('puts lamps under strings of lights, within the limit', () => {
+    const strings = { type: 'ceiling_lights', x: 15, y: 10, width: 24, depth: 10 };
+    const lamps = lampPositions(garden, [strings]);
+    expect(lamps).toHaveLength(3);
+    for (const l of lamps) expect(Math.abs(l[0] - 15)).toBeLessThan(12);
+    expect(lampPositions(garden, [strings, strings, strings]).length).toBeLessThanOrEqual(
+      MAX_LAMPS,
+    );
+  });
+
+  it('bounces the colour of the ground, chosen or natural', () => {
+    expect(bounceColor({ floor: 'bar', floorColor: '#FFFFFF' })).not.toBe('#FFFFFF');
+    expect(bounceColor({ floor: 'parket', floorColor: '#123456' })).toBe('#123456');
   });
 });

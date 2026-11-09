@@ -101,6 +101,7 @@ export async function renderPanorama(
   catalog: ReadonlyMap<string, CatalogItem>,
   pose: Pose,
   evening: boolean,
+  sunset = false,
 ): Promise<string> {
   const canvas = document.createElement('canvas');
   canvas.width = PANO_WIDTH;
@@ -122,6 +123,7 @@ export async function renderPanorama(
             project={{ hall, items: [...items] }}
             catalog={catalog}
             evening={evening}
+            sunset={sunset}
             waitForModels
           />
           <Capture pose={pose} onDone={resolve} onError={reject} />

@@ -42,6 +42,8 @@ interface Props {
   project: Pick<Project, 'hall' | 'items'>;
   catalog: CatalogMap;
   evening: boolean;
+  /** Outdoors, the evening is the golden hour instead of the night. */
+  sunset?: boolean;
   /** Bump when the (mutable) catalog map was reloaded, so the scene picks up new models. */
   catalogVersion?: number;
   /**
@@ -52,7 +54,14 @@ interface Props {
 }
 
 /** The whole 3D hall built from the same project data as the 2D plan. */
-export function HallScene({ project, catalog, evening, catalogVersion, waitForModels }: Props) {
+export function HallScene({
+  project,
+  catalog,
+  evening,
+  sunset,
+  catalogVersion,
+  waitForModels,
+}: Props) {
   const { hall, items } = project;
   // Real woven relief for all cloth, once its photo texture has loaded (exports wait for it).
   const fabric = usePbr('fabric', waitForModels);
@@ -95,7 +104,13 @@ export function HallScene({ project, catalog, evening, catalogVersion, waitForMo
 
   return (
     <>
-      <Lighting hall={hall} items={items} evening={evening} waitForEnv={waitForModels} />
+      <Lighting
+        hall={hall}
+        items={items}
+        evening={evening}
+        sunset={sunset}
+        waitForEnv={waitForModels}
+      />
       <Hall3D hall={hall} evening={evening} wait={waitForModels} />
       {procedural.map(({ item, cat, baseY }) => (
         <ItemMesh key={item.id} item={item} cat={cat} hall={hall} evening={evening} baseY={baseY} />

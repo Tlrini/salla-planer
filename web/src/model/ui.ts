@@ -18,6 +18,8 @@ interface UiState {
   save: SaveStatus;
   view: ViewMode;
   evening: boolean;
+  /** Where the sky can be seen, the evening is the golden hour instead of the night. */
+  sunset: boolean;
   camera: CameraPreset;
   /** Eye-level "Street View" walking instead of orbiting (Beta 3). */
   walk: boolean;
@@ -45,6 +47,7 @@ export const useUi = create<UiState>()((set) => ({
   save: { kind: 'saved', at: new Date() },
   view: '2d',
   evening: false,
+  sunset: false,
   camera: 'perspective',
   walk: false,
   edit3d: false,
