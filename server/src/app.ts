@@ -7,6 +7,7 @@ import fastifyStatic from '@fastify/static';
 import { MAX_MODEL_BYTES } from '@salla/shared';
 import { registerAuth } from './auth.js';
 import { runDailyBackup } from './backup.js';
+import { startAiScans } from './aiScan.js';
 import { cleanupImages } from './cleanup.js';
 import type { AppConfig } from './config.js';
 import { openDb, type DB } from './db.js';
@@ -57,7 +58,17 @@ export async function buildApp(config: AppConfig): Promise<BuiltApp> {
   registerPlanningRoutes(app, db);
   registerSettingsRoutes(app, db);
   registerUserRoutes(app, db);
-  registerScanRoutes(app, db, config.dataDir, config.scanWorkerToken);
+  registerScanRoutes(app, db, config.dataDir, config.scanWorkerToken, !!config.aiScanProvider);
+  if (config.aiScanProvider) {
+    const stopAiScans = startAiScans(
+      db,
+      config.dataDir,
+      config.aiScanProvider,
+      (err) => app.log.error(err, 'AI scan'),
+      config.aiScanPollMs,
+    );
+    app.addHook('onClose', async () => stopAiScans());
+  }
 
   // Uploaded GLB models.
   const uploads = path.join(config.dataDir, 'uploads');

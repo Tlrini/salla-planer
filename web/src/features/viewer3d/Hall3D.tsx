@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import {
   hasTentFrame,
   isNaturalGround,
+  isRound,
   seesSky,
   WINDOW_SILL,
   type Hall,
@@ -11,6 +12,7 @@ import {
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { ScanShell } from './ScanShell';
 import { OutdoorScene } from './OutdoorScene';
+import { RoundPavilionShell } from './RoundPavilionShell';
 import { TentShell } from './TentShell';
 import { geo, mat } from './resources';
 import { FLOOR_TILE_METERS, floorTextures } from './textures';
@@ -240,6 +242,9 @@ export function Hall3D({
 }) {
   const g = geo();
   const floor = useFloorMaterial(hall, wait);
+  // Same size and texture layout as the unit plane, cut to a circle.
+  const roundFloor = useMemo(() => new THREE.CircleGeometry(0.5, 128), []);
+  useEffect(() => () => roundFloor.dispose(), [roundFloor]);
   const W = hall.width;
   const L = hall.length;
   const H = hall.height;
@@ -293,7 +298,9 @@ export function Hall3D({
   );
   const kind = hall.kind ?? 'salle';
   let shell: JSX.Element | null = box;
-  if (hasTentFrame(hall)) {
+  if (isRound(hall)) {
+    shell = <RoundPavilionShell hall={hall} evening={evening} wait={wait} />;
+  } else if (hasTentFrame(hall)) {
     shell = <TentShell hall={hall} evening={evening} wait={wait} />;
   } else if (kind === 'jashte') {
     shell = null;
@@ -316,7 +323,7 @@ export function Hall3D({
     <group>
       {!scanFloor && (
         <mesh
-          geometry={g.plane}
+          geometry={isRound(hall) ? roundFloor : g.plane}
           material={floor}
           rotation={[-Math.PI / 2, 0, 0]}
           position={[W / 2, 0, L / 2]}

@@ -26,6 +26,14 @@ export type ScanPurpose = z.infer<typeof ScanPurpose>;
 export const ScanQuality = z.enum(['quick', 'detailed']);
 export type ScanQuality = z.infer<typeof ScanQuality>;
 
+/**
+ * How the model is made. Photogrammetry: rebuilt from a video or many photos, closest to the
+ * real object, slow. AI: guessed by an image-to-3D model from one photo, about two minutes.
+ * Both are kept until they have been compared on a real GPU.
+ */
+export const ScanMethod = z.enum(['photogrammetry', 'ai']);
+export type ScanMethod = z.infer<typeof ScanMethod>;
+
 /** What the worker is doing right now (shown next to the progress). */
 export const ScanStage = z.enum(['download', 'frames', 'reconstruct', 'optimize', 'upload']);
 export type ScanStage = z.infer<typeof ScanStage>;
@@ -36,6 +44,7 @@ export const ScanJob = z.object({
   purpose: ScanPurpose,
   source: ScanSource,
   quality: ScanQuality,
+  method: ScanMethod,
   fileCount: z.number().int().nonnegative(),
   status: ScanStatus,
   /** 0–100 while processing. */
@@ -58,7 +67,13 @@ export const ScanJob = z.object({
 export type ScanJob = z.infer<typeof ScanJob>;
 
 /** GET /api/scans: scanning only works when the server has a worker token configured. */
-export const ScanList = z.object({ enabled: z.boolean(), jobs: z.array(ScanJob) });
+export const ScanList = z.object({
+  /** Photogrammetry is available (a worker token is set). */
+  enabled: z.boolean(),
+  /** AI scans are available (a GPU service is connected). */
+  aiEnabled: z.boolean(),
+  jobs: z.array(ScanJob),
+});
 export type ScanList = z.infer<typeof ScanList>;
 
 /** POST /api/worker/claim response: the job to process and its input files. */
@@ -93,6 +108,19 @@ export type ScanHallFinish = z.infer<typeof ScanHallFinish>;
 export const MAX_SCAN_UPLOAD_BYTES = 500 * 1024 * 1024;
 export const MIN_SCAN_PHOTOS = 20;
 export const MAX_SCAN_PHOTOS = 200;
+/** An AI scan takes one photo; the page shrinks it first, so this is only a safety limit. */
+export const AI_MAX_PHOTO_BYTES = 7 * 1024 * 1024;
+/** After this long the GPU service has lost the job or is down. */
+export const AI_SCAN_MAX_MS = 15 * 60 * 1000;
+/** Usual minutes for an AI scan (an estimate until measured on the real GPU). */
+export const AI_EXPECTED_MINUTES = 2;
+
+/** Progress of an AI scan, which reports none: rises and slows down, never reaches 100. Pure. */
+export function aiScanProgress(elapsedMs: number): number {
+  const share = 1 - Math.exp(-(Math.max(0, elapsedMs) / (AI_EXPECTED_MINUTES * 60_000)) * 1.6);
+  return Math.round(10 + 85 * share);
+}
+
 /** A processing job without a heartbeat for this long is given to the next worker claim. */
 export const SCAN_STALE_MS = 20 * 60 * 1000;
 /** Claims per job before it fails for good (the worker crashed or timed out each time). */
@@ -127,15 +155,19 @@ const EXPECTED_MINUTES: Record<ScanPurpose, Record<ScanQuality, number>> = {
   hall: { quick: 18, detailed: 35 },
 };
 
-export const scanExpectedMinutes = (quality: ScanQuality, purpose: ScanPurpose): number =>
-  EXPECTED_MINUTES[purpose][quality];
+export const scanExpectedMinutes = (
+  quality: ScanQuality,
+  purpose: ScanPurpose,
+  method: ScanMethod = 'photogrammetry',
+): number => (method === 'ai' ? AI_EXPECTED_MINUTES : EXPECTED_MINUTES[purpose][quality]);
 
 /** About how many minutes a waiting or running job still needs; null when it isn't running. */
 export function scanMinutesLeft(
-  job: Pick<ScanJob, 'quality' | 'purpose' | 'status' | 'progress'>,
+  job: Pick<ScanJob, 'quality' | 'purpose' | 'status' | 'progress'> &
+    Partial<Pick<ScanJob, 'method'>>,
 ): number | null {
   if (!isScanActive(job.status)) return null;
-  const total = scanExpectedMinutes(job.quality, job.purpose);
+  const total = scanExpectedMinutes(job.quality, job.purpose, job.method);
   if (job.status === 'queued') return total;
   return Math.max(1, Math.ceil(total * (1 - job.progress / 100)));
 }

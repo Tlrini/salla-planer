@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CATALOG, catalogById } from './catalog-defaults.js';
-import { allowedMounts } from './geometry.js';
+import {
+  allowedMounts,
+  autoLayoutTables,
+  clampToHall,
+  fitToRound,
+  isWalkable,
+  tentPoles,
+  walkArea,
+  walkTarget,
+} from './geometry.js';
 import {
   canopyPoles,
   catalogFor,
@@ -10,6 +19,7 @@ import {
   isCover,
   isOpenAir,
   isOutdoor,
+  isRound,
   seesSky,
   toOpenAirItems,
 } from './outdoor.js';
@@ -135,5 +145,122 @@ describe('poles for lights in the open air', () => {
     const poles = canopyPoles({ width: 6, depth: 6, canopy: { pattern: 'star', spacing: 12 } });
     expect(poles).toContainEqual({ x: 0, z: 0 });
     expect(poles).toHaveLength(5);
+  });
+});
+
+describe('the round glass pavilion', () => {
+  const catalog = catalogById(DEFAULT_CATALOG);
+  const hall = {
+    name: 'R',
+    width: 20,
+    length: 20,
+    height: 4,
+    floor: 'parket' as const,
+    floorColor: '#FFFFFF',
+    wallColor: '#FFFFFF',
+    structure: [],
+    kind: 'rotonde' as const,
+  };
+  const off = (p: { x: number; y: number }) => Math.hypot(p.x - 10, p.y - 10);
+
+  it('is an inside place that sees the sky and has a frame', () => {
+    expect(isRound(hall)).toBe(true);
+    expect(seesSky(hall)).toBe(true);
+    expect(isOutdoor(hall)).toBe(false);
+    expect(hasTentFrame(hall)).toBe(true);
+    expect(groundOptions(hall)).not.toContain('bar');
+  });
+
+  it('becomes a circle as wide as the longer side', () => {
+    const patch = hallKindPatch({ width: 30, length: 18, floor: 'parket' }, 'rotonde');
+    expect([patch.width, patch.length]).toEqual([30, 30]);
+  });
+
+  it('has no doors, windows or wall decor', () => {
+    const ids = catalogFor(DEFAULT_CATALOG, hall).map((c) => c.id);
+    expect(ids).not.toContain('door');
+    expect(ids).not.toContain('window');
+    expect(allowedMounts(catalog.get('flower_stand'), hall)).not.toContain('wall');
+  });
+
+  it('keeps items inside the circle, chairs included', () => {
+    const cat = catalog.get('table_round_10')!;
+    const table = item({
+      type: 'table_round_10',
+      x: 19.5,
+      y: 19.5,
+      width: cat.width,
+      depth: cat.width,
+    });
+    const at = clampToHall(table, hall, cat);
+    expect(off(at)).toBeLessThan(10 - cat.width / 2);
+    const inside = item({ x: 12, y: 11 });
+    expect(clampToHall(inside, hall, catalog.get('plant'))).toEqual({ x: 12, y: 11 });
+  });
+
+  it('puts a full round ceiling in the middle', () => {
+    const at = clampToHall(
+      item({
+        type: 'ceiling_lights',
+        x: 3,
+        y: 3,
+        width: 20,
+        depth: 20,
+        canopy: { pattern: 'star', spacing: 12, round: true },
+      }),
+      hall,
+      catalog.get('ceiling_lights'),
+    );
+    expect(at).toEqual({ x: 10, y: 10 });
+  });
+
+  it('stands its poles evenly on the circle', () => {
+    const poles = tentPoles(hall);
+    expect(poles.length).toBe(13);
+    for (const p of poles) expect(off(p)).toBeCloseTo(9.92, 1);
+  });
+
+  it('moves items to the centre of a new circle and off the walls', () => {
+    const out = fitToRound(
+      [
+        item({ id: 'c', x: 15, y: 9 }),
+        item({ id: 'w', x: 1, y: 1, mount: 'wall', elevation: 1 }),
+        item({ id: 'd', type: 'door' }),
+        item({
+          id: 'l',
+          type: 'ceiling_lights',
+          x: 15,
+          y: 9,
+          width: 30,
+          depth: 18,
+          mount: 'ceiling',
+          canopy: { pattern: 'rows', spacing: 1 },
+        }),
+      ],
+      { width: 30, length: 18 },
+      { width: 30, length: 30, kind: 'rotonde' },
+      catalog,
+    );
+    expect(out.map((i) => i.id)).toEqual(['c', 'w', 'l']);
+    expect([out[0]!.x, out[0]!.y]).toEqual([15, 15]);
+    expect(out[1]).not.toHaveProperty('mount');
+    expect(Math.hypot(out[1]!.x - 15, out[1]!.y - 15)).toBeLessThanOrEqual(15);
+    expect(out[2]!.canopy!.round).toBe(true);
+    expect([out[2]!.x, out[2]!.y]).toEqual([15, 15]);
+  });
+
+  it('lays tables out only inside the circle', () => {
+    const cat = catalog.get('table_round_10')!;
+    const spots = autoLayoutTables('table_round_10', 60, hall, [], catalog);
+    expect(spots.length).toBeGreaterThan(4);
+    for (const p of spots) expect(off(p)).toBeLessThan(10 - cat.width / 2);
+  });
+
+  it('stops walkers at the curved wall', () => {
+    const area = walkArea(hall, [], catalog);
+    expect(isWalkable({ x: 10, y: 10 }, area)).toBe(true);
+    expect(isWalkable({ x: 1, y: 1 }, area)).toBe(false);
+    const q = walkTarget({ x: 0.5, y: 0.5 }, area)!;
+    expect(isWalkable(q, area)).toBe(true);
   });
 });

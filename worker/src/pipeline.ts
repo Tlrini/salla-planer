@@ -5,11 +5,13 @@ import { NodeIO, type Document } from '@gltf-transform/core';
 import { dedup, prune, simplify, weld } from '@gltf-transform/functions';
 import { MeshoptSimplifier } from 'meshoptimizer';
 import {
+  FRAME_OVERSAMPLE,
   framesPerSecond,
   isTextureFile,
   jpegName,
+  MAX_CANDIDATE_FPS,
   MAX_FRAMES,
-  pickEvenly,
+  pickSharpest,
   pickMeshOutput,
   rewriteMtl,
   simplifyRatio,
@@ -71,7 +73,11 @@ export async function extractFrames(
   width = 1920,
 ): Promise<number> {
   fs.mkdirSync(outDir, { recursive: true });
-  const fps = framesPerSecond(await videoDuration(video), maxFrames);
+  const fps = framesPerSecond(
+    await videoDuration(video),
+    maxFrames * FRAME_OVERSAMPLE,
+    MAX_CANDIDATE_FPS,
+  );
   await run('ffmpeg', [
     '-hide_banner',
     '-loglevel',
@@ -88,7 +94,11 @@ export async function extractFrames(
     .readdirSync(outDir)
     .filter((f) => f.endsWith('.jpg'))
     .sort();
-  const keep = new Set(pickEvenly(frames, maxFrames));
+  const candidates = frames.map((name) => ({
+    name,
+    size: fs.statSync(path.join(outDir, name)).size,
+  }));
+  const keep = new Set(pickSharpest(candidates, maxFrames).map((f) => f.name));
   for (const f of frames) if (!keep.has(f)) fs.rmSync(path.join(outDir, f));
   return keep.size;
 }

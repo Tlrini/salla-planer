@@ -8,9 +8,11 @@ import {
   clampToHall,
   defaultCanopy,
   findFreeSpot,
+  fitToRound,
   hasTentFrame,
   isCanopy,
   isOpenAir,
+  isRound,
   isTentPole,
   mountPatch,
   tentPoles,
@@ -193,7 +195,7 @@ export const useEditor = create<EditorState>()(
             width,
             depth: length,
             mount: 'ceiling',
-            canopy: defaultCanopy(type),
+            canopy: { ...defaultCanopy(type), ...(isRound(project.hall) ? { round: true } : {}) },
           };
           set({ project: touch(project, [...project.items, item]), selection: [item.id] });
           return item.id;
@@ -299,6 +301,23 @@ export const useEditor = create<EditorState>()(
         const wasTent = hasTentFrame(project.hall);
         const resized = patch.width || patch.length || patch.height;
         let items = project.items;
+        const refit =
+          isRound(hall) &&
+          (!isRound(project.hall) ||
+            hall.width !== project.hall.width ||
+            hall.length !== project.hall.length);
+        if (refit) {
+          // Centred in the circle, inside it, and off the curved wall: all in one undo step.
+          items = fitToRound(items, project.hall, hall, catalogMap);
+          hall.structure = fitToRound(hall.structure, project.hall, hall, catalogMap);
+        } else if (!isRound(hall) && isRound(project.hall)) {
+          items = items.map((i) => {
+            if (!i.canopy?.round) return i;
+            const canopy = { ...i.canopy };
+            delete canopy.round;
+            return { ...i, canopy };
+          });
+        }
         if (isOpenAir(hall) && !isOpenAir(project.hall)) {
           // No walls or ceiling any more: all in this one undo step.
           items = toOpenAirItems(items);

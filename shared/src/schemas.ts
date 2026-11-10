@@ -60,7 +60,12 @@ export const Item = z.object({
    * or a star with `spacing` arms. `height` is how far it hangs down in the middle.
    */
   canopy: z
-    .object({ pattern: z.enum(['rows', 'star']), spacing: z.number().finite().positive().max(60) })
+    .object({
+      pattern: z.enum(['rows', 'star']),
+      spacing: z.number().finite().positive().max(60),
+      /** Fills the ellipse inside its box instead of the box: decor under a round roof. */
+      round: z.boolean().optional(),
+    })
     .optional(),
 });
 export type Item = z.infer<typeof Item>;
@@ -194,7 +199,7 @@ export const Underlay = z.object({
 export type Underlay = z.infer<typeof Underlay>;
 
 /** The kind of room drawn in 3D; the plan is always the width × length rectangle. */
-export const HallKind = z.enum(['salle', 'tende', 'skan', 'jashte', 'xham']);
+export const HallKind = z.enum(['salle', 'tende', 'skan', 'jashte', 'xham', 'rotonde']);
 export type HallKind = z.infer<typeof HallKind>;
 
 /** A scanned room used as the hall's 3D shell, and how to place it (see scan/HallScanDialog). */

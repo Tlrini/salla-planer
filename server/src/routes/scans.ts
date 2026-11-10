@@ -5,6 +5,7 @@ import { pipeline } from 'node:stream/promises';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { nanoid } from 'nanoid';
 import {
+  AI_MAX_PHOTO_BYTES,
   canTransition,
   isClaimable,
   MAX_LIBRARY_MODEL_BYTES,
@@ -14,6 +15,7 @@ import {
   SCAN_MAX_ATTEMPTS,
   ScanFailBody,
   ScanHallFinish,
+  ScanMethod,
   ScanName,
   ScanProgressBody,
   ScanPurpose,
@@ -44,6 +46,7 @@ interface ScanRow {
   hall_id: string | null;
   source: ScanSource;
   quality: ScanQuality;
+  method: ScanMethod;
   file_count: number;
   status: ScanStatus;
   progress: number;
@@ -66,6 +69,7 @@ const toJob = (r: ScanRow): ScanJob => ({
   purpose: r.purpose,
   source: r.source,
   quality: r.quality,
+  method: r.method,
   fileCount: r.file_count,
   status: r.status,
   progress: r.progress,
@@ -123,6 +127,7 @@ export function registerScanRoutes(
   db: DB,
   dataDir: string,
   workerToken: string | undefined,
+  aiEnabled = false,
 ): void {
   const enabled = !!workerToken && workerToken.length >= MIN_WORKER_TOKEN_LENGTH;
   const inputDir = (id: string) => path.join(dataDir, 'scans', path.basename(id));
@@ -145,7 +150,7 @@ export function registerScanRoutes(
     const rows = db
       .prepare('SELECT * FROM scan_jobs ORDER BY created_at DESC LIMIT 100')
       .all() as ScanRow[];
-    return { enabled, jobs: rows.map(toJob) };
+    return { enabled, aiEnabled, jobs: rows.map(toJob) };
   });
 
   app.get<{ Params: { id: string } }>('/api/scans/:id', async (req, reply) => {
@@ -155,7 +160,7 @@ export function registerScanRoutes(
   });
 
   app.post('/api/scans', async (req, reply) => {
-    if (!enabled) return reply.code(503).send({ error: 'scanning_disabled' });
+    if (!enabled && !aiEnabled) return reply.code(503).send({ error: 'scanning_disabled' });
     const id = nanoid(12);
     const dir = inputDir(id);
     fs.mkdirSync(dir, { recursive: true });
@@ -167,6 +172,7 @@ export function registerScanRoutes(
     let name = '';
     let purposeField = 'decor';
     let qualityField = 'quick';
+    let methodField = 'photogrammetry';
     let video: string | null = null;
     let photos = 0;
     let total = 0;
@@ -176,7 +182,7 @@ export function registerScanRoutes(
         limits: {
           fileSize: MAX_SCAN_UPLOAD_BYTES,
           files: MAX_SCAN_PHOTOS,
-          fields: 4,
+          fields: 5,
           fieldSize: 1000,
         },
       });
@@ -185,6 +191,7 @@ export function registerScanRoutes(
           if (part.fieldname === 'name') name = String(part.value);
           if (part.fieldname === 'purpose') purposeField = String(part.value);
           if (part.fieldname === 'quality') qualityField = String(part.value);
+          if (part.fieldname === 'method') methodField = String(part.value);
           continue;
         }
         // Stream to disk (a video can be hundreds of MB), then check what it really is.
@@ -221,19 +228,30 @@ export function registerScanRoutes(
     if (!purpose.success) return fail(400, 'invalid_purpose');
     const quality = ScanQuality.safeParse(qualityField);
     if (!quality.success) return fail(400, 'invalid_quality');
+    const method = ScanMethod.safeParse(methodField);
+    if (!method.success) return fail(400, 'invalid_method');
     if (!video && photos === 0) return fail(400, 'no_file');
-    if (!video && photos < MIN_SCAN_PHOTOS) return fail(400, 'too_few_photos');
+    if (method.data === 'ai') {
+      if (!aiEnabled) return fail(503, 'ai_disabled');
+      if (purpose.data !== 'decor') return fail(400, 'invalid_method');
+      if (video || photos !== 1) return fail(400, 'ai_needs_one_photo');
+      if (total > AI_MAX_PHOTO_BYTES) return fail(413, 'too_large');
+    } else {
+      if (!enabled) return fail(503, 'scanning_disabled');
+      if (!video && photos < MIN_SCAN_PHOTOS) return fail(400, 'too_few_photos');
+    }
 
     const user = req.user!;
     const now = stamp();
     db.prepare(
-      `INSERT INTO scan_jobs (id, name, purpose, quality, source, file_count, status, created_by, created_by_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
+      `INSERT INTO scan_jobs (id, name, purpose, quality, method, source, file_count, status, created_by, created_by_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`,
     ).run(
       id,
       parsedName.data,
       purpose.data,
       quality.data,
+      method.data,
       video ? 'video' : 'photos',
       video ? 1 : photos,
       user.displayName,
@@ -252,8 +270,26 @@ export function registerScanRoutes(
     if (inputFiles(row.id).length === 0) return reply.code(409).send({ error: 'inputs_missing' });
     db.prepare(
       `UPDATE scan_jobs SET status = 'queued', attempts = 0, progress = 0, stage = NULL, error = NULL,
-         lease = NULL, heartbeat_at = NULL, updated_at = ? WHERE id = ?`,
+         lease = NULL, heartbeat_at = NULL, provider_job = NULL, provider_started_at = NULL,
+         updated_at = ? WHERE id = ?`,
     ).run(stamp(), row.id);
+    return toJob(getRow(row.id)!);
+  });
+
+  // An AI result differs on every run: the agent can ask for another from the same photo.
+  app.post<{ Params: { id: string } }>('/api/scans/:id/regenerate', async (req, reply) => {
+    const row = getRow(req.params.id);
+    if (!row) return reply.code(404).send({ error: 'not_found' });
+    if (row.method !== 'ai' || row.status !== 'ready')
+      return reply.code(409).send({ error: 'invalid_status' });
+    if (!aiEnabled) return reply.code(503).send({ error: 'ai_disabled' });
+    if (inputFiles(row.id).length === 0) return reply.code(409).send({ error: 'inputs_missing' });
+    db.prepare(
+      `UPDATE scan_jobs SET status = 'queued', attempts = 0, progress = 0, stage = NULL, error = NULL,
+         result_file = NULL, provider_job = NULL, provider_started_at = NULL, heartbeat_at = NULL,
+         updated_at = ? WHERE id = ?`,
+    ).run(stamp(), row.id);
+    removeUploadFile(dataDir, row.result_file ?? undefined);
     return toJob(getRow(row.id)!);
   });
 
@@ -359,12 +395,14 @@ export function registerScanRoutes(
     const lease = req.headers[LEASE_HEADER];
     return row && row.status === 'processing' && row.lease && lease === row.lease ? row : null;
   };
-  const claimableRows = () =>
+  const activeRows = () =>
     db
       .prepare(
         `SELECT * FROM scan_jobs WHERE status IN ('queued', 'processing') ORDER BY created_at`,
       )
       .all() as ScanRow[];
+  // AI scans go to the GPU service from this server; they must never start the GPU VM.
+  const claimableRows = () => activeRows().filter((r) => r.method === 'photogrammetry');
   const opts = { preHandler: requireWorker };
 
   // Polled by deploy/scan-starter.sh on the app VM: start the GPU VM when this is above 0.
@@ -382,7 +420,7 @@ export function registerScanRoutes(
   // script give up waiting for a GPU that never comes, so a stuck scan cannot keep the server on.
   app.get(`${WORKER_PREFIX}status`, opts, async () => {
     const now = Date.now();
-    const rows = claimableRows();
+    const rows = activeRows();
     const queued = rows.filter((r) => r.status === 'queued');
     const processing = rows.filter(
       (r) =>

@@ -1,7 +1,8 @@
 import { memo } from 'react';
-import { Arc, Group, Image as KonvaImage, Line, Rect, Shape, Text } from 'react-konva';
+import { Arc, Circle, Group, Image as KonvaImage, Line, Rect, Shape, Text } from 'react-konva';
 import type Konva from 'konva';
-import { formatMeters, type Hall, type Item } from '@salla/shared';
+import { formatMeters, isRound, type Hall, type Item } from '@salla/shared';
+import { sq } from '../../i18n/sq';
 import { BLUEPRINT, CM, FONT_MONO } from './units';
 import { useLoadedImage } from './images';
 
@@ -95,6 +96,13 @@ function StructureNode({ item }: { item: Item }) {
   );
 }
 
+/** Clips to the circle inside a square of side `size`. */
+const clipCircle = (size: number) => (ctx: Konva.Context) => {
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  ctx.closePath();
+};
+
 function HallLayerImpl({ hall, scale }: Props) {
   const w = hall.width * CM;
   const h = hall.length * CM;
@@ -103,11 +111,16 @@ function HallLayerImpl({ hall, scale }: Props) {
   const off = px(22);
   const tick = px(6);
   const u = hall.underlay;
+  const round = isRound(hall);
   const photo = useLoadedImage(u?.url);
 
   return (
     <Group>
-      <Rect name="background" x={0} y={0} width={w} height={h} fill={BLUEPRINT.hallFill} />
+      {round ? (
+        <Circle name="background" x={w / 2} y={h / 2} radius={w / 2} fill={BLUEPRINT.hallFill} />
+      ) : (
+        <Rect name="background" x={0} y={0} width={w} height={h} fill={BLUEPRINT.hallFill} />
+      )}
       {u && photo && (
         // Photo of the real floor plan, under the grid and the decor.
         <KonvaImage
@@ -120,30 +133,44 @@ function HallLayerImpl({ hall, scale }: Props) {
           listening={false}
         />
       )}
-      <Shape
-        sceneFunc={gridScene(w, h, CM, 5 * CM)}
-        stroke={BLUEPRINT.gridMinor}
-        strokeWidth={1}
-        strokeScaleEnabled={false}
-        listening={false}
-      />
-      <Shape
-        sceneFunc={gridScene(w, h, 5 * CM, 0)}
-        stroke={BLUEPRINT.gridMajor}
-        strokeWidth={1}
-        strokeScaleEnabled={false}
-        listening={false}
-      />
-      <Rect
-        x={0}
-        y={0}
-        width={w}
-        height={h}
-        stroke={BLUEPRINT.line}
-        strokeWidth={3}
-        strokeScaleEnabled={false}
-        listening={false}
-      />
+      <Group listening={false} clipFunc={round ? clipCircle(w) : undefined}>
+        <Shape
+          sceneFunc={gridScene(w, h, CM, 5 * CM)}
+          stroke={BLUEPRINT.gridMinor}
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+        <Shape
+          sceneFunc={gridScene(w, h, 5 * CM, 0)}
+          stroke={BLUEPRINT.gridMajor}
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      </Group>
+      {round ? (
+        <Circle
+          x={w / 2}
+          y={h / 2}
+          radius={w / 2}
+          stroke={BLUEPRINT.line}
+          strokeWidth={3}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      ) : (
+        <Rect
+          x={0}
+          y={0}
+          width={w}
+          height={h}
+          stroke={BLUEPRINT.line}
+          strokeWidth={3}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      )}
 
       {hall.structure.map((s) => (
         <StructureNode key={s.id} item={s} />
@@ -174,14 +201,14 @@ function HallLayerImpl({ hall, scale }: Props) {
           y={-off - font * 1.5}
           width={w}
           align="center"
-          text={formatMeters(hall.width)}
+          text={round ? sq.hall.diameterValue(formatMeters(hall.width)) : formatMeters(hall.width)}
           fontSize={font}
           fontFamily={FONT_MONO}
           fill={BLUEPRINT.text}
         />
       </Group>
-      {/* length along the left */}
-      <Group listening={false}>
+      {/* length along the left; a circle needs only its diameter */}
+      <Group listening={false} visible={!round}>
         <Line
           points={[-off, 0, -off, h]}
           stroke={BLUEPRINT.lineSoft}

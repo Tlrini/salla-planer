@@ -75,6 +75,21 @@ function edgePoint(angle: number, hw: number, hd: number): P2 {
   return { x: c * k, z: s * k };
 }
 
+/** The point on the ellipse inside the rectangle, in direction `angle` from its center. */
+function ellipsePoint(angle: number, hw: number, hd: number): P2 {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const k = 1 / Math.hypot(c / hw, s / hd);
+  return { x: c * k, z: s * k };
+}
+
+/** Half the length of a row at `offset` across `half`, inside the ellipse. */
+const chord = (offset: number, half: number, along: number): number =>
+  along * Math.sqrt(Math.max(0, 1 - (offset / half) ** 2));
+
+/** Rows at the very edge of an ellipse would be shorter than this, and are left out (m). */
+const MIN_ROUND_ROW = 0.2;
+
 /** Offsets of the rows across `span`: as many as fit, centered, never fewer than one. */
 function rowOffsets(span: number, spacing: number): number[] {
   const count = Math.max(1, Math.floor(span / spacing));
@@ -88,18 +103,23 @@ export function canopyStrands(item: Sized): Strand[] {
   const { pattern, spacing } = canopySettings(item);
   const hw = item.width / 2;
   const hd = item.depth / 2;
+  const round = !!item.canopy?.round;
+  const edge = round ? ellipsePoint : edgePoint;
   if (pattern === 'rows') {
     const alongX = item.width >= item.depth;
     const span = alongX ? item.depth : item.width;
-    return rowOffsets(span, spacing).map((o) =>
-      alongX
-        ? { a: { x: -hw, z: o }, b: { x: hw, z: o } }
-        : { a: { x: o, z: -hd }, b: { x: o, z: hd } },
-    );
+    const [halfAlong, halfAcross] = alongX ? [hw, hd] : [hd, hw];
+    return rowOffsets(span, spacing).flatMap((o) => {
+      const reach = round ? chord(o, halfAcross, halfAlong) : halfAlong;
+      if (round && 2 * reach < MIN_ROUND_ROW) return [];
+      return alongX
+        ? [{ a: { x: -reach, z: o }, b: { x: reach, z: o } }]
+        : [{ a: { x: o, z: -reach }, b: { x: o, z: reach } }];
+    });
   }
   return Array.from({ length: spacing }, (_, i) => ({
     a: { x: 0, z: 0 },
-    b: edgePoint((i / spacing) * 2 * Math.PI, hw, hd),
+    b: edge((i / spacing) * 2 * Math.PI, hw, hd),
   }));
 }
 
@@ -108,35 +128,45 @@ export function canopyPanels(item: Sized): Panel[] {
   const { pattern, spacing } = canopySettings(item);
   const hw = item.width / 2;
   const hd = item.depth / 2;
+  const round = !!item.canopy?.round;
+  const edge = round ? ellipsePoint : edgePoint;
   if (pattern === 'rows') {
     const alongX = item.width >= item.depth;
     const span = alongX ? item.depth : item.width;
     const offsets = rowOffsets(span, spacing);
     // A small gap, so the rows read as separate swags.
     const half = (span / offsets.length / 2) * 0.96;
-    return offsets.map((o) =>
-      alongX
-        ? {
-            a1: { x: -hw, z: o - half },
-            a2: { x: -hw, z: o + half },
-            b1: { x: hw, z: o - half },
-            b2: { x: hw, z: o + half },
-          }
-        : {
-            a1: { x: o - half, z: -hd },
-            a2: { x: o + half, z: -hd },
-            b1: { x: o - half, z: hd },
-            b2: { x: o + half, z: hd },
-          },
-    );
+    const [halfAlong, halfAcross] = alongX ? [hw, hd] : [hd, hw];
+    const reach = (o: number) => (round ? chord(o, halfAcross, halfAlong) : halfAlong);
+    return offsets.flatMap((o) => {
+      const [r1, r2] = [reach(o - half), reach(o + half)];
+      if (round && r1 + r2 < MIN_ROUND_ROW) return [];
+      return alongX
+        ? [
+            {
+              a1: { x: -r1, z: o - half },
+              a2: { x: -r2, z: o + half },
+              b1: { x: r1, z: o - half },
+              b2: { x: r2, z: o + half },
+            },
+          ]
+        : [
+            {
+              a1: { x: o - half, z: -r1 },
+              a2: { x: o + half, z: -r2 },
+              b1: { x: o - half, z: r1 },
+              b2: { x: o + half, z: r2 },
+            },
+          ];
+    });
   }
   const center = { x: 0, z: 0 };
   const step = (2 * Math.PI) / spacing;
   return Array.from({ length: spacing }, (_, i) => ({
     a1: center,
     a2: center,
-    b1: edgePoint((i - 0.5) * step, hw, hd),
-    b2: edgePoint((i + 0.5) * step, hw, hd),
+    b1: edge((i - 0.5) * step, hw, hd),
+    b2: edge((i + 0.5) * step, hw, hd),
   }));
 }
 

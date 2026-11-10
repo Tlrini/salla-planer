@@ -256,7 +256,8 @@ function CanopyFields({ item }: { item: Item }) {
               aria-pressed={pattern === p}
               disabled={item.locked}
               onClick={() =>
-                pattern !== p && update({ canopy: { pattern: p, spacing: defaultSpacing(p) } })
+                pattern !== p &&
+                update({ canopy: { ...item.canopy, pattern: p, spacing: defaultSpacing(p) } })
               }
             >
               {sq.canopy.patterns[p]}
@@ -272,7 +273,9 @@ function CanopyFields({ item }: { item: Item }) {
           unit={pattern === 'rows' ? 'm' : undefined}
           min={pattern === 'rows' ? MIN_ROW_SPACING : MIN_STAR_ARMS}
           max={pattern === 'rows' ? MAX_ROW_SPACING : MAX_STAR_ARMS}
-          onCommit={(v) => v !== undefined && update({ canopy: { pattern, spacing: v } })}
+          onCommit={(v) =>
+            v !== undefined && update({ canopy: { ...item.canopy, pattern, spacing: v } })
+          }
         />
         <NumberField
           label={sq.canopy.sag}

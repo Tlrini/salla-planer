@@ -1,6 +1,7 @@
 import {
   isOpenAir,
   isOverhead,
+  isRound,
   type CatalogItem,
   type Hall,
   type Item,
@@ -188,8 +189,8 @@ export function roomSurfaceHit(
   };
   plane('floor', undefined, 'y', 0, false);
   plane('ceiling', undefined, 'y', H, true);
-  // In the open air only the plane of the hung lights remains.
-  if (!isOpenAir(hall)) {
+  // Without flat walls only the plane of the ceiling or the hung lights remains.
+  if (!isOpenAir(hall) && !isRound(hall)) {
     plane('wall', 'top', 'z', 0, false);
     plane('wall', 'bottom', 'z', L, true);
     plane('wall', 'left', 'x', 0, false);

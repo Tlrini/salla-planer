@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Camera, Images, RotateCcw, Send, Square } from 'lucide-react';
+import { ArrowLeft, Camera, Images, RotateCcw, Send, Sparkles, Square } from 'lucide-react';
 import {
+  AI_MAX_PHOTO_BYTES,
   MAX_SCAN_PHOTOS,
   MIN_SCAN_PHOTOS,
   type ScanJob,
   type ScanList,
+  type ScanMethod,
   type ScanPurpose,
   type ScanQuality,
 } from '@salla/shared';
@@ -17,9 +19,12 @@ import {
   pickRecorderMime,
   RECORD_BITS_PER_SECOND,
   RECORD_LIMITS,
+  checkPhoto,
+  shrinkPhoto,
   stepAt,
   videoExtension,
   type CaptureStep,
+  type PhotoWarning,
 } from './capture';
 
 interface Upload {
@@ -31,12 +36,20 @@ type Phase =
   | { kind: 'intro' }
   | { kind: 'recording' }
   | { kind: 'review'; upload: Upload; url: string; seconds: number }
+  | { kind: 'aiPhoto'; upload: Upload; url: string; warnings: PhotoWarning[] }
   | { kind: 'photos'; files: File[] }
   | { kind: 'uploading'; progress: number }
   | { kind: 'sent' };
 
 type Problem =
-  'noCamera' | 'cameraDenied' | 'sendError' | 'tooLarge' | 'nameMissing' | 'tooFew' | 'tooMany';
+  | 'noCamera'
+  | 'cameraDenied'
+  | 'cameraLost'
+  | 'sendError'
+  | 'tooLarge'
+  | 'nameMissing'
+  | 'tooFew'
+  | 'tooMany';
 
 const canRecord = () =>
   typeof navigator !== 'undefined' &&
@@ -101,26 +114,60 @@ const TEXT: Record<
  */
 export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
   const text = TEXT[purpose];
-  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [available, setAvailable] = useState<{ scan: boolean; ai: boolean } | null>(null);
+  const [chosenMethod, setChosenMethod] = useState<ScanMethod>('ai');
   const [name, setName] = useState('');
   const [quality, setQuality] = useState<ScanQuality>('quick');
   const [phase, setPhase] = useState<Phase>({ kind: 'intro' });
   const [problem, setProblem] = useState<Problem | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
+  const aiPhotoRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const aiOffered = purpose === 'decor' && !!available?.ai;
+  // Both are on the page only when both services are connected.
+  const bothOffered = aiOffered && !!available?.scan;
+  const method: ScanMethod = !aiOffered ? 'photogrammetry' : bothOffered ? chosenMethod : 'ai';
+  const enabled = available === null ? null : method === 'ai' ? available.ai : available.scan;
 
   useEffect(() => {
     api
       .get<ScanList>('/api/scans')
-      .then((r) => setEnabled(r.enabled))
-      .catch(() => setEnabled(false));
+      .then((r) => setAvailable({ scan: r.enabled, ai: r.aiEnabled }))
+      .catch(() => setAvailable({ scan: false, ai: false }));
   }, []);
 
   // Free the recorded video when it is no longer shown.
-  const reviewUrl = phase.kind === 'review' ? phase.url : null;
+  const reviewUrl = phase.kind === 'review' || phase.kind === 'aiPhoto' ? phase.url : null;
   useEffect(() => {
     if (!reviewUrl) return;
     return () => URL.revokeObjectURL(reviewUrl);
   }, [reviewUrl]);
+
+  /** Before capturing: afterwards the name field is no longer on the screen. */
+  const nameReady = () => {
+    if (name.trim()) return true;
+    setProblem('nameMissing');
+    nameRef.current?.focus();
+    return false;
+  };
+
+  const pickAiPhoto = async (list: FileList | null) => {
+    const file = list?.[0];
+    if (aiPhotoRef.current) aiPhotoRef.current.value = '';
+    if (!file) return;
+    const blob = await shrinkPhoto(file);
+    if (blob.size > AI_MAX_PHOTO_BYTES) {
+      setProblem('tooLarge');
+      return;
+    }
+    setProblem(null);
+    setPhase({
+      kind: 'aiPhoto',
+      upload: { blob, filename: 'foto.jpg' },
+      url: URL.createObjectURL(blob),
+      warnings: await checkPhoto(blob),
+    });
+  };
 
   const send = async (uploads: Upload[], back: Phase) => {
     if (!name.trim()) {
@@ -132,6 +179,7 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
     form.append('name', name.trim());
     form.append('purpose', purpose);
     form.append('quality', quality);
+    form.append('method', method);
     for (const u of uploads) form.append('file', u.blob, u.filename);
     setPhase({ kind: 'uploading', progress: 0 });
     try {
@@ -180,11 +228,28 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
 
           {phase.kind === 'intro' && (
             <>
-              <p>{text.intro}</p>
+              <p>{method === 'ai' ? sq.scan.aiIntro : text.intro}</p>
+              {bothOffered && (
+                <div className="field">
+                  <span className="field-label">{sq.scan.method}</span>
+                  <div className="segmented" role="group" aria-label={sq.scan.method}>
+                    {(['ai', 'photogrammetry'] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        aria-pressed={method === m}
+                        onClick={() => setChosenMethod(m)}
+                      >
+                        {sq.scan.methodOption[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <section className="scan-tips" aria-label={sq.scan.tipsTitle}>
                 <h2>{sq.scan.tipsTitle}</h2>
                 <ul>
-                  {text.tips.map((t) => (
+                  {(method === 'ai' ? sq.scan.aiTips : text.tips).map((t) => (
                     <li key={t}>{t}</li>
                   ))}
                 </ul>
@@ -192,6 +257,7 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
               <div className="field">
                 <label htmlFor="scan-name">{text.name}</label>
                 <input
+                  ref={nameRef}
                   id="scan-name"
                   type="text"
                   value={name}
@@ -200,60 +266,85 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
                   onChange={(e) => setName(e.target.value)}
                 />
               </div>
-              <div className="field">
-                <span className="field-label">{sq.scan.quality}</span>
-                <div className="segmented" role="group" aria-label={sq.scan.quality}>
-                  {(['quick', 'detailed'] as const).map((q) => (
-                    <button
-                      key={q}
-                      type="button"
-                      aria-pressed={quality === q}
-                      onClick={() => setQuality(q)}
-                    >
-                      {sq.scan.qualityOption[q]}
-                    </button>
-                  ))}
+              {method === 'photogrammetry' && (
+                <div className="field">
+                  <span className="field-label">{sq.scan.quality}</span>
+                  <div className="segmented" role="group" aria-label={sq.scan.quality}>
+                    {(['quick', 'detailed'] as const).map((q) => (
+                      <button
+                        key={q}
+                        type="button"
+                        aria-pressed={quality === q}
+                        onClick={() => setQuality(q)}
+                      >
+                        {sq.scan.qualityOption[q]}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="muted small" data-testid="scan-quality-hint">
+                    {sq.scan.qualityHint[quality](TIME_RANGE[purpose][quality])}
+                  </p>
                 </div>
-                <p className="muted small" data-testid="scan-quality-hint">
-                  {sq.scan.qualityHint[quality](TIME_RANGE[purpose][quality])}
-                </p>
-              </div>
-              <div className="scan-actions">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={enabled !== true}
-                  onClick={() => {
-                    if (!canRecord()) {
-                      setProblem('noCamera');
-                      return;
-                    }
-                    setProblem(null);
-                    setPhase({ kind: 'recording' });
-                  }}
-                >
-                  <Camera size={18} />
-                  <span>{sq.scan.record}</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={enabled !== true}
-                  onClick={() => photoRef.current?.click()}
-                >
-                  <Images size={18} />
-                  <span>{sq.scan.photos}</span>
-                </button>
-                <input
-                  ref={photoRef}
-                  type="file"
-                  accept="image/jpeg,image/png"
-                  multiple
-                  hidden
-                  data-testid="scan-photos"
-                  onChange={(e) => pickPhotos(e.target.files)}
-                />
-              </div>
+              )}
+              {method === 'ai' ? (
+                <div className="scan-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={enabled !== true}
+                    onClick={() => nameReady() && aiPhotoRef.current?.click()}
+                  >
+                    <Sparkles size={18} />
+                    <span>{sq.scan.aiPick}</span>
+                  </button>
+                  <input
+                    ref={aiPhotoRef}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    hidden
+                    data-testid="scan-ai-photo"
+                    onChange={(e) => void pickAiPhoto(e.target.files)}
+                  />
+                </div>
+              ) : (
+                <div className="scan-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={enabled !== true}
+                    onClick={() => {
+                      if (!nameReady()) return;
+                      if (!canRecord()) {
+                        setProblem('noCamera');
+                        return;
+                      }
+                      setProblem(null);
+                      setPhase({ kind: 'recording' });
+                    }}
+                  >
+                    <Camera size={18} />
+                    <span>{sq.scan.record}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={enabled !== true}
+                    onClick={() => nameReady() && photoRef.current?.click()}
+                  >
+                    <Images size={18} />
+                    <span>{sq.scan.photos}</span>
+                  </button>
+                  <input
+                    ref={photoRef}
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    multiple
+                    hidden
+                    data-testid="scan-photos"
+                    onChange={(e) => pickPhotos(e.target.files)}
+                  />
+                </div>
+              )}
             </>
           )}
 
@@ -286,6 +377,32 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
                 <button type="button" className="btn" onClick={restart}>
                   <RotateCcw size={18} />
                   <span>{sq.scan.retake}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => void send([phase.upload], phase)}
+                >
+                  <Send size={18} />
+                  <span>{sq.scan.send}</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {phase.kind === 'aiPhoto' && (
+            <>
+              <h2>{sq.scan.aiReview}</h2>
+              <img className="scan-video" src={phase.url} alt={name} />
+              {phase.warnings.map((w) => (
+                <p key={w} className="notice" role="status">
+                  {sq.scan.aiWarning[w]}
+                </p>
+              ))}
+              <div className="scan-actions">
+                <button type="button" className="btn" onClick={restart}>
+                  <RotateCcw size={18} />
+                  <span>{sq.scan.aiOther}</span>
                 </button>
                 <button
                   type="button"
@@ -335,7 +452,7 @@ export function ScanPage({ purpose = 'decor' }: { purpose?: ScanPurpose }) {
           {phase.kind === 'sent' && (
             <>
               <p className="notice" role="status">
-                {text.sent(TIME_RANGE[purpose][quality])}
+                {method === 'ai' ? sq.scan.aiSent : text.sent(TIME_RANGE[purpose][quality])}
               </p>
               <div className="scan-actions">
                 <button
@@ -381,7 +498,7 @@ function Recorder({
 }: {
   purpose: ScanPurpose;
   onDone: (blob: Blob, seconds: number) => void;
-  onFail: (problem: 'noCamera' | 'cameraDenied') => void;
+  onFail: (problem: 'noCamera' | 'cameraDenied' | 'cameraLost') => void;
 }) {
   const limits = RECORD_LIMITS[purpose];
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -402,7 +519,10 @@ function Recorder({
     let timer: ReturnType<typeof setInterval> | undefined;
     const chunks: Blob[] = [];
 
-    void (async () => {
+    // Waits a moment, because asking for the camera twice and releasing one (React's dev mode
+    // mounts twice) can end the other stream too.
+    const begin = setTimeout(() => void openCamera(), 0);
+    const openCamera = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
@@ -447,7 +567,10 @@ function Recorder({
       };
       recorder.onstop = () => {
         const type = recorder.mimeType || mime || 'video/webm';
-        done.current(new Blob(chunks, { type }), (Date.now() - started) / 1000);
+        const length = (Date.now() - started) / 1000;
+        // Too short means the camera was taken away (a call, the app switched): not a scan.
+        if (length < RECORD_LIMITS[purpose].min) fail.current('cameraLost');
+        else done.current(new Blob(chunks, { type }), length);
       };
       recorder.start(1000);
       recorderRef.current = recorder;
@@ -457,10 +580,11 @@ function Recorder({
         setSeconds(s);
         if (s >= RECORD_LIMITS[purpose].max && recorder.state === 'recording') recorder.stop();
       }, 250);
-    })();
+    };
 
     return () => {
       cancelled = true;
+      clearTimeout(begin);
       clearInterval(timer);
       const r = recorderRef.current;
       if (r && r.state !== 'inactive') {

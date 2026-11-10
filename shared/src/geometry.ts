@@ -1,5 +1,5 @@
 import { isCanopy } from './canopy.js';
-import { isCover, isOpenAir } from './outdoor.js';
+import { isCover, isOpenAir, isRound } from './outdoor.js';
 import type { CatalogItem, Hall, Item, Mount } from './schemas.js';
 
 /** Seat spacing for per-length tables (imperial): 1 seat per 0.6 m on each side. */
@@ -150,13 +150,17 @@ export function footprintBox(item: Item, cat?: CatalogItem): Box {
   return { minX: b.minX - m, minY: b.minY - m, maxX: b.maxX + m, maxY: b.maxY + m };
 }
 
+/** How far from its center a footprint reaches: round things touch a circle sooner. */
+const reachOf = (hx: number, hy: number, circular: boolean): number =>
+  circular ? Math.max(hx, hy) : Math.hypot(hx, hy);
+
 /**
  * Keep the item's bounding box inside the hall. Returns the corrected center; a wall item is
  * also pressed against its nearest wall and turned to face the room (`rotation` is then set).
  */
 export function clampToHall(
   item: Item,
-  hall: Pick<Hall, 'width' | 'length'>,
+  hall: Pick<Hall, 'width' | 'length'> & Partial<Pick<Hall, 'kind'>>,
   cat?: CatalogItem,
 ): { x: number; y: number; rotation?: number } {
   if (item.mount === 'wall') return wallPlacement(item, hall);
@@ -164,6 +168,14 @@ export function clampToHall(
   const f = footprintBox(item, cat);
   const hx = (f.maxX - f.minX) / 2;
   const hy = (f.maxY - f.minY) / 2;
+  if (isRound(hall)) {
+    const circular = cat?.shape2d === 'circle' || !!item.canopy?.round;
+    const room = Math.max(0, hall.width / 2 - reachOf(hx, hy, circular));
+    const [cx, cy] = [hall.width / 2, hall.length / 2];
+    const [dx, dy] = [item.x - cx, item.y - cy];
+    const k = Math.min(1, room / Math.max(1e-9, Math.hypot(dx, dy)));
+    return { x: round6(cx + dx * k), y: round6(cy + dy * k) };
+  }
   const clamp = (v: number, h: number, size: number) =>
     2 * h >= size ? size / 2 : Math.min(size - h, Math.max(h, v));
   return { x: round6(clamp(item.x, hx, hall.width)), y: round6(clamp(item.y, hy, hall.length)) };
@@ -221,7 +233,7 @@ export function findFreeSpot(
   draft: Item,
   at: { x: number; y: number },
   items: readonly Item[],
-  hall: Pick<Hall, 'width' | 'length'>,
+  hall: Pick<Hall, 'width' | 'length'> & Partial<Pick<Hall, 'kind'>>,
   catalog: CatalogMap,
   step = 0.5,
   maxRings = 40,
@@ -431,7 +443,10 @@ export const isTentPole = (i: Pick<Item, 'id'>): boolean => i.id.startsWith(TENT
  * tables and walking like any column. Long sides reach the eaves; poles on the end walls
  * reach the roof above them. The span in between stays free of poles.
  */
-export function tentPoles(hall: Pick<Hall, 'width' | 'length' | 'height'>): Item[] {
+export function tentPoles(
+  hall: Pick<Hall, 'width' | 'length' | 'height'> & Partial<Pick<Hall, 'kind'>>,
+): Item[] {
+  if (isRound(hall)) return roundPoles(hall);
   const { alongX, len, span, rise } = tentRoof(hall);
   const poles: Array<{ along: number; across: number; height: number }> = [];
   for (const along of bayStops(len)) {
@@ -455,6 +470,56 @@ export function tentPoles(hall: Pick<Hall, 'width' | 'length' | 'height'>): Item
     height: p.height,
     color: POLE_COLOR,
   }));
+}
+
+/** The poles of the round pavilion: evenly around the glass, none in the middle. */
+function roundPoles(hall: Pick<Hall, 'width' | 'length' | 'height'>): Item[] {
+  const radius = hall.width / 2;
+  const count = Math.max(8, Math.ceil((2 * Math.PI * radius) / TENT_BAY));
+  const r = radius - POLE_INSET;
+  return Array.from({ length: count }, (_, i) => {
+    const a = (i / count) * 2 * Math.PI;
+    return {
+      id: `${TENT_POLE_PREFIX}${i}`,
+      type: 'column',
+      x: round6(radius + r * Math.cos(a)),
+      y: round6(hall.length / 2 + r * Math.sin(a)),
+      rotation: 0,
+      width: POLE_SIZE,
+      depth: POLE_SIZE,
+      height: hall.height,
+      color: POLE_COLOR,
+    };
+  });
+}
+
+/**
+ * Items after a hall becomes round or changes diameter: they keep their place relative to the
+ * centre, nothing stays on a wall or outside the circle, ceiling decor follows the circle.
+ */
+export function fitToRound(
+  items: readonly Item[],
+  before: Pick<Hall, 'width' | 'length'>,
+  hall: Pick<Hall, 'width' | 'length' | 'kind'>,
+  catalog: CatalogMap,
+): Item[] {
+  const dx = (hall.width - before.width) / 2;
+  const dy = (hall.length - before.length) / 2;
+  return items
+    .filter((i) => i.type !== 'door' && i.type !== 'window')
+    .map((i) => {
+      const moved: Item = { ...i, x: i.x + dx, y: i.y + dy };
+      if (moved.mount === 'wall') {
+        delete moved.mount;
+        delete moved.elevation;
+      }
+      if (moved.canopy) {
+        moved.canopy = { ...moved.canopy, round: true };
+        moved.width = Math.min(moved.width, hall.width);
+        moved.depth = Math.min(moved.depth, hall.length);
+      }
+      return { ...moved, ...clampToHall(moved, hall, catalog.get(moved.type)) };
+    });
 }
 
 // ----- wall and ceiling placement ------------------------------------------------
@@ -481,6 +546,11 @@ export function allowedMounts(
 ): Mount[] {
   if (cat && isCanopy(cat.id)) return ['ceiling'];
   if (isOpenAir(place) || (cat && isCover(cat.id))) return ['floor'];
+  if (place.kind === 'rotonde') return allowedOnFlatWalls(cat).filter((m) => m !== 'wall');
+  return allowedOnFlatWalls(cat);
+}
+
+function allowedOnFlatWalls(cat: CatalogItem | undefined): Mount[] {
   if (!cat || cat.category === 'tables' || cat.category === 'structure' || FLOOR_ONLY.has(cat.id))
     return ['floor'];
   return ['floor', 'wall', 'ceiling'];
@@ -587,7 +657,7 @@ const NON_BLOCKING = new Set([
 export function autoLayoutTables(
   type: string,
   count: number,
-  hall: Pick<Hall, 'width' | 'length' | 'structure'>,
+  hall: Pick<Hall, 'width' | 'length' | 'structure'> & Partial<Pick<Hall, 'kind'>>,
   items: readonly Item[],
   catalog: CatalogMap,
   aisle = AISLE,
@@ -637,7 +707,11 @@ export function autoLayoutTables(
       const x = round6(x0 + i * (fw + aisle));
       const y = round6(y0 + j * (fd + aisle));
       const box = footprintBox({ ...probe, x, y }, cat);
-      if (obstacles.every((o) => !boxesOverlap(box, o, 0.001)))
+      const fits =
+        !isRound(hall) ||
+        Math.hypot(x - hall.width / 2, y - hall.length / 2) <=
+          hall.width / 2 - margin - reachOf(fw / 2, fd / 2, cat.shape2d === 'circle');
+      if (fits && obstacles.every((o) => !boxesOverlap(box, o, 0.001)))
         out.push({ x: snap(x, 0.01), y: snap(y, 0.01) });
     }
   }
@@ -772,13 +846,15 @@ const WALK_THROUGH = new Set(['uplight', 'door', 'window']);
 export interface WalkArea {
   width: number;
   length: number;
+  /** The walls are the circle inside width × length. */
+  round?: boolean;
   /** Footprints (tables include their chairs) grown by the walking radius. */
   obstacles: Box[];
 }
 
 /** The walkable floor of a hall: walls, furniture and columns block, floors/decor don't. */
 export function walkArea(
-  hall: Pick<Hall, 'width' | 'length' | 'structure'>,
+  hall: Pick<Hall, 'width' | 'length' | 'structure'> & Partial<Pick<Hall, 'kind'>>,
   items: readonly Item[],
   catalog: CatalogMap,
   radius = WALK_RADIUS,
@@ -794,12 +870,30 @@ export function walkArea(
         maxY: b.maxY + radius,
       };
     });
-  return { width: hall.width, length: hall.length, obstacles };
+  return {
+    width: hall.width,
+    length: hall.length,
+    ...(isRound(hall) ? { round: true } : {}),
+    obstacles,
+  };
 }
 
 const inside = (p: Point, b: Box) => p.x > b.minX && p.x < b.maxX && p.y > b.minY && p.y < b.maxY;
 
+/** The point itself, or the nearest one that stays off a round wall. */
+function insideCircle(p: Point, area: WalkArea): Point {
+  const [cx, cy] = [area.width / 2, area.length / 2];
+  const room = area.width / 2 - WALL_MARGIN;
+  const k = Math.min(1, room / Math.max(1e-9, Math.hypot(p.x - cx, p.y - cy)));
+  return { x: cx + (p.x - cx) * k, y: cy + (p.y - cy) * k };
+}
+
 export function isWalkable(p: Point, area: WalkArea): boolean {
+  if (
+    area.round &&
+    Math.hypot(p.x - area.width / 2, p.y - area.length / 2) > area.width / 2 - WALL_MARGIN
+  )
+    return false;
   if (p.x < WALL_MARGIN || p.y < WALL_MARGIN) return false;
   if (p.x > area.width - WALL_MARGIN || p.y > area.length - WALL_MARGIN) return false;
   return !area.obstacles.some((b) => inside(p, b));
@@ -810,10 +904,13 @@ export function isWalkable(p: Point, area: WalkArea): boolean {
  * to the closest side. Null when no free spot is near (e.g. a hall packed wall to wall).
  */
 export function walkTarget(p: Point, area: WalkArea): Point | null {
-  const clampWalls = (q: Point): Point => ({
-    x: Math.min(area.width - WALL_MARGIN, Math.max(WALL_MARGIN, q.x)),
-    y: Math.min(area.length - WALL_MARGIN, Math.max(WALL_MARGIN, q.y)),
-  });
+  const clampWalls = (q: Point): Point =>
+    area.round
+      ? insideCircle(q, area)
+      : {
+          x: Math.min(area.width - WALL_MARGIN, Math.max(WALL_MARGIN, q.x)),
+          y: Math.min(area.length - WALL_MARGIN, Math.max(WALL_MARGIN, q.y)),
+        };
   let q = clampWalls(p);
   for (let round = 0; round < 6; round++) {
     const hit = area.obstacles.find((b) => inside(q, b));

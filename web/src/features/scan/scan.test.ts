@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { photoCountProblem, pickRecorderMime, stepAt, videoExtension } from './capture';
+import {
+  fitSize,
+  photoCountProblem,
+  photoWarnings,
+  pickRecorderMime,
+  stepAt,
+  videoExtension,
+} from './capture';
 import { cropBounds, FULL_CROP, keptTriangles, MIN_CROP_SPAN, setCropEnd } from './crop';
 import { hallFromScan, planImageSize, shellOffset, validHallSize } from './hallFit';
 
@@ -99,5 +106,35 @@ describe('scanned hall as the 3D shell', () => {
     expect(min.x * scale + offset.x).toBeCloseTo(0);
     expect(min.y * scale + offset.y).toBeCloseTo(0);
     expect(min.z * scale + offset.z).toBeCloseTo(0);
+  });
+});
+
+describe('photo for an AI scan', () => {
+  it('scales down without enlarging', () => {
+    expect(fitSize(4000, 3000, 1600)).toEqual({ width: 1600, height: 1200 });
+    expect(fitSize(3000, 4000, 1600)).toEqual({ width: 1200, height: 1600 });
+    expect(fitSize(800, 600, 1600)).toEqual({ width: 800, height: 600 });
+  });
+
+  const image = (w: number, h: number, value: (x: number, y: number) => number) =>
+    Array.from({ length: w * h }, (_, i) => value(i % w, Math.floor(i / w)));
+
+  it('accepts a bright photo with clear edges', () => {
+    const sharp = image(64, 64, (x, y) => (((x >> 2) + (y >> 2)) % 2 ? 230 : 90));
+    expect(photoWarnings(sharp, 64, 64)).toEqual([]);
+  });
+
+  it('warns about a dark photo', () => {
+    const dark = image(64, 64, (x, y) => (((x >> 2) + (y >> 2)) % 2 ? 60 : 5));
+    expect(photoWarnings(dark, 64, 64)).toEqual(['dark']);
+  });
+
+  it('warns about a photo without edges', () => {
+    const soft = image(64, 64, (x) => 120 + x / 4);
+    expect(photoWarnings(soft, 64, 64)).toEqual(['blurry']);
+  });
+
+  it('says nothing about an image too small to judge', () => {
+    expect(photoWarnings([1, 2, 3, 4], 2, 2)).toEqual([]);
   });
 });

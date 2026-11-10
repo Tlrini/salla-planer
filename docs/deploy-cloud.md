@@ -297,6 +297,17 @@ phone ──video──▶ app server ◀──claim / result── GPU worker (
 The GPU worker delivers its model to the app, so scans are only processed while the app server
 is on. The app server's auto-stop waits for a running scan.
 
+### AI scans from one photo (being compared with Meshroom)
+
+Agents can also make a model from **one photo** (_Me AI_). The app server sends the photo to
+TRELLIS.2 on **RunPod Serverless** and gets a `.glb` back; the GPU is billed per second and costs
+nothing while idle, and no disk has to stay on for it apart from a small volume for the weights.
+Set-up: `worker-ai/README.md`, then `RUNPOD_API_KEY` and `RUNPOD_ENDPOINT_ID` in `.env`.
+
+Rough cost, to be confirmed on the first runs: about $0.02 to $0.06 per model, plus about $2 a
+month for a 30 GB volume. Keeping only the AI would remove the GPU VM's disk ($9.52 a month) and
+its hours from the table in §3. Decide which method stays after testing both on real decor.
+
 ### 4.1 One-time: GPU quota
 
 New AWS accounts may not start GPU VMs. _Service Quotas → Amazon EC2 → "Running On-Demand G

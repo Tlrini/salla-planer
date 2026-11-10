@@ -8,6 +8,7 @@ import {
   framesPerSecond,
   jpegName,
   pickEvenly,
+  pickSharpest,
   pickMeshOutput,
   reconstructProgress,
   rewriteMtl,
@@ -87,5 +88,35 @@ describe('scan quality', () => {
     expect(triangleBudget('detailed', 150_000)).toBe(150_000);
     expect(expectedMinutes('quick', 'decor')).toBeLessThan(expectedMinutes('detailed', 'decor'));
     expect(expectedMinutes('quick', 'hall')).toBeLessThan(expectedMinutes('detailed', 'hall'));
+  });
+});
+
+describe('choosing frames', () => {
+  const frames = (sizes: number[]) => sizes.map((size, i) => ({ name: `f${i}`, size }));
+
+  it('keeps the sharpest of each stretch, in order', () => {
+    const picked = pickSharpest(frames([1, 9, 3, 2, 8, 4]), 3).map((f) => f.name);
+    expect(picked).toEqual(['f1', 'f2', 'f4']);
+  });
+
+  it('keeps everything when there are not more frames than needed', () => {
+    expect(pickSharpest(frames([1, 2]), 5)).toHaveLength(2);
+    expect(pickSharpest(frames([1, 2]), 0)).toEqual([]);
+  });
+
+  it('still covers the whole video', () => {
+    const many = frames(Array.from({ length: 160 }, (_, i) => (i * 37) % 11));
+    const picked = pickSharpest(many, 80);
+    expect(picked).toHaveLength(80);
+    const index = picked.map((f) => Number(f.name.slice(1)));
+    for (let i = 1; i < index.length; i++) expect(index[i]! - index[i - 1]!).toBeLessThan(4);
+    expect(index[0]).toBeLessThan(2);
+    expect(index.at(-1)).toBeGreaterThan(157);
+  });
+
+  it('takes more candidates than frames, within the rate limit', () => {
+    expect(framesPerSecond(90, 160, 4)).toBeCloseTo(1.778, 2);
+    expect(framesPerSecond(90, 400, 4)).toBe(4);
+    expect(framesPerSecond(null, 160, 4)).toBe(4);
   });
 });

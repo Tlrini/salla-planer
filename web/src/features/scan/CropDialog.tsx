@@ -188,12 +188,22 @@ interface Props {
   onClose: () => void;
   /** The scan became a draft library decor; the caller opens its setup dialog. */
   onFinished: (item: CatalogItem) => void;
+  /** An AI scan went back to make another model. */
+  onRegenerated: () => void;
 }
 
-/** "Pastrimi i modelit": cut the table and floor away from a scan before it goes to the library. */
-export function CropDialog({ job, onClose, onFinished }: Props) {
+/**
+ * "Pastrimi i modelit": cut the table and floor away from a scan before it goes to the library.
+ * An AI model is already only the object: the agent just looks at it, keeps it or asks for another.
+ */
+export function CropDialog({ job, onClose, onFinished, onRegenerated }: Props) {
   return (
-    <Modal open={!!job} title={sq.scan.cropTitle} onClose={onClose} wide>
+    <Modal
+      open={!!job}
+      title={job?.method === 'ai' ? sq.scan.aiPreviewTitle : sq.scan.cropTitle}
+      onClose={onClose}
+      wide
+    >
       {job?.resultFile && (
         <CropForm
           key={job.id}
@@ -201,6 +211,7 @@ export function CropDialog({ job, onClose, onFinished }: Props) {
           url={job.resultFile}
           onClose={onClose}
           onFinished={onFinished}
+          onRegenerated={onRegenerated}
         />
       )}
     </Modal>
@@ -218,23 +229,40 @@ function CropForm({
   url,
   onClose,
   onFinished,
+  onRegenerated,
 }: {
   job: ScanJob;
   url: string;
   onClose: () => void;
   onFinished: (item: CatalogItem) => void;
+  onRegenerated: () => void;
 }) {
+  const ai = job.method === 'ai';
   const [source, setSource] = useState<Loaded | null>(null);
   const [crop, setCrop] = useState<CropFractions>(FULL_CROP);
   const [state, setState] = useState<'idle' | 'saving' | 'error' | 'empty'>('idle');
   const [failed, setFailed] = useState(false);
   const box = useMemo(() => (source ? cropBounds(source.bounds, crop) : null), [source, crop]);
 
+  const again = async () => {
+    setState('saving');
+    try {
+      await api.post(`/api/scans/${job.id}/regenerate`, {});
+      onRegenerated();
+    } catch (err) {
+      console.error('asking for another AI model failed', err);
+      setState('error');
+    }
+  };
+
   const save = async () => {
     if (!source || !box) return;
     setState('saving');
     try {
-      const glb = await exportCropped(source.scene, box);
+      // An AI model is kept exactly as it came; only a cut scan has to be written again.
+      const glb = ai
+        ? await fetch(url).then((r) => r.arrayBuffer())
+        : await exportCropped(source.scene, box);
       if (!glb) {
         setState('empty');
         return;
@@ -273,7 +301,8 @@ function CropForm({
                 <hemisphereLight args={['#ffffff', '#b8b0a4', 2]} />
                 <directionalLight position={[2, 4, 3]} intensity={2.2} />
                 <LoadModel url={url} onLoaded={setSource} />
-                {source && box && <CropPreview source={source} box={box} />}
+                {source && (ai ? <primitive object={source.scene} /> : null)}
+                {source && box && !ai && <CropPreview source={source} box={box} />}
                 {source && <FrameCamera bounds={source.bounds} />}
                 <OrbitControls makeDefault />
               </Canvas>
@@ -284,34 +313,40 @@ function CropForm({
       </div>
 
       <div className="model-form">
-        <p className="muted small">{sq.scan.cropHint}</p>
-        {AXES.map(({ key, label }) => (
-          <fieldset key={key} className="crop-axis">
-            <legend>{label}</legend>
-            {([0, 1] as const).map((end) => (
-              <label key={end} className="crop-range">
-                <span>{end === 0 ? sq.scan.from : sq.scan.to}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={Math.round(crop[key][end] * 100)}
-                  disabled={!source}
-                  onChange={(e) => {
-                    const value = Number(e.target.value) / 100;
-                    setCrop((c) => ({ ...c, [key]: setCropEnd(c[key], end, value) }));
-                  }}
-                />
-                <span className="mono small">{Math.round(crop[key][end] * 100)}%</span>
-              </label>
+        {ai ? (
+          <p className="muted small">{sq.scan.aiPreviewHint}</p>
+        ) : (
+          <>
+            <p className="muted small">{sq.scan.cropHint}</p>
+            {AXES.map(({ key, label }) => (
+              <fieldset key={key} className="crop-axis">
+                <legend>{label}</legend>
+                {([0, 1] as const).map((end) => (
+                  <label key={end} className="crop-range">
+                    <span>{end === 0 ? sq.scan.from : sq.scan.to}</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={Math.round(crop[key][end] * 100)}
+                      disabled={!source}
+                      onChange={(e) => {
+                        const value = Number(e.target.value) / 100;
+                        setCrop((c) => ({ ...c, [key]: setCropEnd(c[key], end, value) }));
+                      }}
+                    />
+                    <span className="mono small">{Math.round(crop[key][end] * 100)}%</span>
+                  </label>
+                ))}
+              </fieldset>
             ))}
-          </fieldset>
-        ))}
-        <button type="button" className="btn" onClick={() => setCrop(FULL_CROP)}>
-          <Undo2 size={16} />
-          <span>{sq.scan.cropReset}</span>
-        </button>
+            <button type="button" className="btn" onClick={() => setCrop(FULL_CROP)}>
+              <Undo2 size={16} />
+              <span>{sq.scan.cropReset}</span>
+            </button>
+          </>
+        )}
         {(state === 'error' || state === 'empty') && (
           <p className="form-error" role="alert">
             {state === 'empty' ? sq.scan.cropEmpty : sq.scan.cropError}
@@ -321,13 +356,23 @@ function CropForm({
           <button type="button" className="btn" onClick={onClose}>
             {sq.common.cancel}
           </button>
+          {ai && (
+            <button
+              type="button"
+              className="btn"
+              disabled={state === 'saving'}
+              onClick={() => void again()}
+            >
+              {sq.scan.aiAgain}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-primary"
             disabled={!source || state === 'saving' || failed}
             onClick={() => void save()}
           >
-            {state === 'saving' ? sq.scan.cropSaving : sq.scan.cropSave}
+            {state === 'saving' ? sq.scan.cropSaving : ai ? sq.scan.aiSave : sq.scan.cropSave}
           </button>
         </div>
       </div>

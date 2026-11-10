@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { TENT_BAY, tentRoof, type Hall } from '@salla/shared';
 import { geo, mat } from './resources';
-import { tiled, usePbr } from './pbrTextures';
+import { useGlassPane, useTentCloth } from './tentMaterials';
 
 /** Fabric sags a little between the frame bays and most in the middle of a slope. */
 const SAG = 0.08;
@@ -150,7 +150,6 @@ export function TentShell({
   const { len, span, rise, alongX } = tentRoof(hall);
   const glass = hall.kind === 'xham';
   const open = !glass && (hall.tent?.openSides ?? false);
-  const fabric = usePbr('fabric', wait);
 
   const geometry = useMemo(
     () => ({ roof: roofGeometry(len, span, rise), gables: gablesGeometry(len, span, rise) }),
@@ -164,39 +163,8 @@ export function TentShell({
     [geometry],
   );
 
-  const cloth = useMemo(() => {
-    const maps = fabric ? tiled(fabric, 1.2, 1.2) : null;
-    return new THREE.MeshStandardMaterial({
-      color: hall.wallColor,
-      roughness: 0.85,
-      // Daylight comes through the fabric, so the roof glows softly; at night it stays dark.
-      emissive: new THREE.Color(hall.wallColor),
-      emissiveIntensity: evening ? 0.05 : 0.32,
-      ...(maps ? { normalMap: maps.normalMap } : {}),
-      normalScale: new THREE.Vector2(0.4, 0.4),
-    });
-  }, [fabric, hall.wallColor, evening]);
-  useEffect(
-    () => () => {
-      cloth.normalMap?.dispose();
-      cloth.dispose();
-    },
-    [cloth],
-  );
-
-  // Floor-to-roof glass: it hides nothing from outside.
-  const pane = useMemo(
-    () =>
-      // Unlit on purpose: on a lit pane every lamp would show as a white dot.
-      new THREE.MeshBasicMaterial({
-        color: evening ? '#74848F' : '#E6F0F4',
-        transparent: true,
-        opacity: 0.14,
-        depthWrite: false,
-      }),
-    [evening],
-  );
-  useEffect(() => () => pane.dispose(), [pane]);
+  const cloth = useTentCloth(hall.wallColor, evening, wait);
+  const pane = useGlassPane(evening);
   const wallMaterial = glass ? pane : cloth;
 
   // Ridge along world x, or along world z (local x → world z, local z → world −x).

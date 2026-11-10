@@ -180,4 +180,14 @@ export const MIGRATIONS: ReadonlyArray<{ id: number; name: string; sql: string }
     // Quick or detailed reconstruction; scans from before this had the full pipeline.
     sql: `ALTER TABLE scan_jobs ADD COLUMN quality TEXT NOT NULL DEFAULT 'detailed';`,
   },
+  {
+    id: 11,
+    name: 'scan_jobs_method',
+    // AI scans run on a GPU service; its job id lets a restarted server pick them up again.
+    sql: `
+      ALTER TABLE scan_jobs ADD COLUMN method TEXT NOT NULL DEFAULT 'photogrammetry';
+      ALTER TABLE scan_jobs ADD COLUMN provider_job TEXT;
+      ALTER TABLE scan_jobs ADD COLUMN provider_started_at INTEGER;
+    `,
+  },
 ];

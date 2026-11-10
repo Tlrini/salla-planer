@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
-import { Camera, RotateCcw, Ruler, Scissors, Trash } from 'lucide-react';
+import { Camera, RotateCcw, Ruler, Scissors, Sparkles, Trash } from 'lucide-react';
 import {
   formatDateTime,
   isScanActive,
@@ -47,6 +47,13 @@ const TEXT: Record<ScanPurpose, { section: string; start: string; empty: string;
       finish: sq.scan.hallFinish,
     },
   };
+
+/** The reason of a failure in words, when it is one an agent can act on. */
+function failureText(job: ScanJob): string {
+  if (job.method !== 'ai' || !job.error) return job.error ?? '';
+  const known = (sq.scan.aiErrors as Record<string, string>)[job.error];
+  return known ?? sq.scan.aiServiceError;
+}
 
 /**
  * The scans of one kind: "Skanimet me kamerë" in the library (decor) or "Skanimet e sallave" on
@@ -114,7 +121,7 @@ export function ScanJobs({
     <section className="scan-jobs" aria-labelledby={`scan-jobs-title-${purpose}`}>
       <div className="scan-jobs-head">
         <h2 id={`scan-jobs-title-${purpose}`}>{text.section}</h2>
-        {list.enabled && (
+        {(list.enabled || list.aiEnabled) && (
           <button
             type="button"
             className="btn"
@@ -125,7 +132,7 @@ export function ScanJobs({
           </button>
         )}
       </div>
-      {!list.enabled ? (
+      {!list.enabled && !list.aiEnabled ? (
         <p className="muted small">{sq.scan.disabled}</p>
       ) : jobs.length === 0 ? (
         <p className="muted small">{text.empty}</p>
@@ -137,7 +144,7 @@ export function ScanJobs({
                 <span className="library-name">{j.name}</span>
                 <span className="muted small">
                   {j.source === 'video' ? sq.scan.sourceVideo : sq.scan.sourcePhotos(j.fileCount)} ·{' '}
-                  {sq.scan.qualityOption[j.quality]} ·{' '}
+                  {j.method === 'ai' ? sq.scan.methodTag : sq.scan.qualityOption[j.quality]} ·{' '}
                   {sq.scan.by(j.createdBy, formatDateTime(j.createdAt))}
                 </span>
                 {j.status === 'processing' && (
@@ -149,17 +156,31 @@ export function ScanJobs({
                     </span>
                   </>
                 )}
-                {j.status === 'queued' && <span className="muted small">{sq.scan.waitHint}</span>}
+                {j.status === 'queued' && (
+                  <span className="muted small">
+                    {j.method === 'ai' ? sq.scan.aiWait : sq.scan.waitHint}
+                  </span>
+                )}
                 {j.status === 'failed' && j.error && (
-                  <span className="muted small mono">{j.error}</span>
+                  <span className="muted small mono">{failureText(j)}</span>
                 )}
               </div>
-              <span className={STATUS_PILL[j.status]}>{sq.scan.status[j.status]}</span>
+              <span className={STATUS_PILL[j.status]}>
+                {j.status === 'ready' && j.method === 'ai'
+                  ? sq.scan.aiReady
+                  : sq.scan.status[j.status]}
+              </span>
               <div className="scan-job-actions">
                 {j.status === 'ready' && (
                   <button type="button" className="btn btn-primary" onClick={() => setFinishing(j)}>
-                    {purpose === 'hall' ? <Ruler size={18} /> : <Scissors size={18} />}
-                    <span>{text.finish}</span>
+                    {j.method === 'ai' ? (
+                      <Sparkles size={18} />
+                    ) : purpose === 'hall' ? (
+                      <Ruler size={18} />
+                    ) : (
+                      <Scissors size={18} />
+                    )}
+                    <span>{j.method === 'ai' ? sq.scan.aiFinish : text.finish}</span>
                   </button>
                 )}
                 {j.status === 'failed' && (
@@ -204,6 +225,10 @@ export function ScanJobs({
                 setFinishing(null);
                 void refresh();
                 onDecorCreated?.(item);
+              }}
+              onRegenerated={() => {
+                setFinishing(null);
+                void refresh();
               }}
             />
           )}

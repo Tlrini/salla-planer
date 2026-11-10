@@ -461,6 +461,17 @@ their photo colour (`isNaturalGround`). Sky and sun: `lightPlan.ts` (`SKY_LIGHT`
 `Ui.sunset` adds Perëndim where the sky shows), `Lighting.tsx` sets the background, CC0 skies in
 `web/public/env/sky_*`, land around the place in `viewer3d/OutdoorScene.tsx`. Covers `gazebo`,
 `pergola`, `parasol` follow the overhead rules (`isOverhead`), roofs show from below only.
+Round glass pavilion (2026-11-10): `Hall.kind` 'rotonde', an inside place like 'xham'. The plan is
+the circle inside the width × length square (always equal, `Diametri`): `clampToHall`,
+`autoLayoutTables`, `walkArea` and `tentPoles` know it through `isRound`; `fitToRound` recentres
+items when a hall becomes round or changes diameter. Ceiling decor uses `Item.canopy.round`. Drawn
+by `viewer3d/RoundPavilionShell.tsx`; no doors, windows or wall decor on the curved glass.
+AI scans (2026-11-10, user's decision: build next to photogrammetry, compare on a real GPU, then
+keep one or both): `ScanJob.method` ('photogrammetry' | 'ai', migration 11). One photo goes from
+`server/src/aiScan.ts` (outbound only, `RUNPOD_API_KEY` + `RUNPOD_ENDPOINT_ID`) to TRELLIS.2 on
+RunPod Serverless (`worker-ai/`, separate from the app, not yet run on a GPU); the .glb then follows
+the normal crop and setup. AI jobs never go to the photogrammetry worker. `npm run dev:phone` serves
+5173 over HTTP and HTTPS so a phone can use its camera, with a placeholder box instead of the AI.
 Scanning upgrades (2026-11-08): a library scan can become the model of a built-in chair or table
 (`POST /api/catalog/:id/model-from-library`, admin; `server/src/modelOptimize.ts` makes a lighter
 copy, 4 000 triangles per chair and 30 000 per table, with @gltf-transform/core,

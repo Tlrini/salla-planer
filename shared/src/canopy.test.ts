@@ -116,3 +116,31 @@ describe('hanging and lights', () => {
     expect(maxCanopySag(2.2)).toBe(0.1);
   });
 });
+
+describe('canopy under a round roof', () => {
+  const round = (c: object) => item({ width: 20, depth: 20, canopy: { ...c, round: true } });
+
+  it('ends every star arm on the circle', () => {
+    for (const s of canopyStrands(round(star(16)))) {
+      expect(Math.hypot(s.b.x, s.b.z)).toBeCloseTo(10);
+    }
+  });
+
+  it('cuts rows at the circle, longest in the middle', () => {
+    const strands = canopyStrands(round(rows(2)));
+    for (const s of strands) {
+      expect(Math.hypot(s.a.x, s.a.z)).toBeCloseTo(10);
+      expect(Math.hypot(s.b.x, s.b.z)).toBeCloseTo(10);
+    }
+    const lengths = strands.map((s) => s.b.x - s.a.x);
+    expect(Math.max(...lengths)).toBeCloseTo(lengths[Math.floor(lengths.length / 2)]!);
+  });
+
+  it('keeps fabric inside the circle', () => {
+    for (const p of canopyPanels(round(rows(2)))) {
+      for (const c of [p.a1, p.a2, p.b1, p.b2]) {
+        expect(Math.hypot(c.x, c.z)).toBeLessThanOrEqual(10 + 1e-6);
+      }
+    }
+  });
+});

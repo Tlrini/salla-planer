@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { isOpenAir, nearestWall, type Hall, type Item } from '@salla/shared';
+import { isOpenAir, isRound, nearestWall, type Hall, type Item } from '@salla/shared';
 import { geo } from './resources';
 import { glowTexture, washTexture } from './textures';
 
@@ -57,7 +57,10 @@ export function UplightWashes({
   const H = Math.min(hall.height, 4);
   // Nothing solid to shine on: open air, glass walls, a tent with its sides rolled up.
   const noWalls =
-    isOpenAir(hall) || hall.kind === 'xham' || (hall.kind === 'tende' && hall.tent?.openSides);
+    isOpenAir(hall) ||
+    hall.kind === 'xham' ||
+    isRound(hall) ||
+    (hall.kind === 'tende' && hall.tent?.openSides);
   return (
     <>
       {items

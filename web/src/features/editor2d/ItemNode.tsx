@@ -139,18 +139,31 @@ function CanopyShape({
           listening={false}
         />
       ))}
-      <Rect
-        x={-w / 2}
-        y={-d / 2}
-        width={w}
-        height={d}
-        fillEnabled={false}
-        stroke={stroke}
-        strokeWidth={strokeWidth}
-        strokeScaleEnabled={false}
-        hitStrokeWidth={28}
-        dash={[12, 8]}
-      />
+      {item.canopy?.round ? (
+        <Circle
+          radius={w / 2}
+          scaleY={d / w}
+          fillEnabled={false}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeScaleEnabled={false}
+          hitStrokeWidth={28}
+          dash={[12, 8]}
+        />
+      ) : (
+        <Rect
+          x={-w / 2}
+          y={-d / 2}
+          width={w}
+          height={d}
+          fillEnabled={false}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeScaleEnabled={false}
+          hitStrokeWidth={28}
+          dash={[12, 8]}
+        />
+      )}
     </>
   );
 }

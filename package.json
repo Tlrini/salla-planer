@@ -11,6 +11,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev:phone": "node scripts/dev-phone.mjs",
     "dev": "npm run build -w shared && concurrently -k -n shared,server,web -c gray,blue,magenta \"npm:dev -w shared\" \"npm:dev -w server\" \"npm:dev -w web\"",
     "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
     "test": "vitest run",

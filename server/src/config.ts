@@ -1,3 +1,4 @@
+import { mockProvider, runpodProvider, type AiScanProvider } from './aiScan.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +30,9 @@ export interface AppConfig {
    * MIN_WORKER_TOKEN_LENGTH = in-page scanning is off.
    */
   scanWorkerToken?: string;
+  /** Where AI scans run. Unset = the AI method is off. */
+  aiScanProvider?: AiScanProvider;
+  aiScanPollMs?: number;
 }
 
 export const MIN_WORKER_TOKEN_LENGTH = 32;
@@ -53,6 +57,18 @@ export function isProduction(env = process.env, argv = process.argv): boolean {
   return env.NODE_ENV === 'production' || argv.includes('--production');
 }
 
+function aiProviderFromEnv(
+  env: NodeJS.ProcessEnv,
+  production: boolean,
+): Pick<AppConfig, 'aiScanProvider'> {
+  const key = env.RUNPOD_API_KEY?.trim();
+  const endpoint = env.RUNPOD_ENDPOINT_ID?.trim();
+  if (key && endpoint) return { aiScanProvider: runpodProvider(key, endpoint) };
+  // A pretend model must never reach real clients.
+  if (env.AI_SCAN_PROVIDER === 'mock' && !production) return { aiScanProvider: mockProvider() };
+  return {};
+}
+
 export function configFromEnv(env = process.env): AppConfig {
   const production = isProduction(env);
   const dataDir = path.resolve(env.DATA_DIR ?? path.join(REPO_ROOT, 'data'));
@@ -67,5 +83,6 @@ export function configFromEnv(env = process.env): AppConfig {
     adminUser: env.ADMIN_USER,
     adminPassword: env.ADMIN_PASSWORD,
     scanWorkerToken: env.SCAN_WORKER_TOKEN?.trim() || undefined,
+    ...aiProviderFromEnv(env, production),
   };
 }

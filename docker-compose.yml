@@ -16,6 +16,9 @@ services:
       TRUST_PROXY: 172.28.0.10
       # In-page scanning (Beta 5): shared secret of the GPU worker; empty = scanning off.
       SCAN_WORKER_TOKEN: ${SCAN_WORKER_TOKEN:-}
+      # AI scans from one photo (worker-ai/README.md); empty = that method is off.
+      RUNPOD_API_KEY: ${RUNPOD_API_KEY:-}
+      RUNPOD_ENDPOINT_ID: ${RUNPOD_ENDPOINT_ID:-}
     volumes:
       # app.db, uploads/ (GLB models) and backups/ live here.
       - ./data:/app/data

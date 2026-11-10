@@ -31,10 +31,38 @@ export function expectedMinutes(quality: ScanQuality, purpose: ScanPurpose): num
  * Frame rate for ffmpeg so a video gives about MAX_FRAMES frames. Unknown durations (browser
  * WebM recordings often have none) use MAX_FPS; pickEvenly trims the result afterwards.
  */
-export function framesPerSecond(durationSec: number | null, maxFrames = MAX_FRAMES): number {
-  if (durationSec === null || !Number.isFinite(durationSec) || durationSec <= 0) return MAX_FPS;
-  const fps = Math.min(MAX_FPS, maxFrames / durationSec);
+export function framesPerSecond(
+  durationSec: number | null,
+  maxFrames = MAX_FRAMES,
+  maxFps = MAX_FPS,
+): number {
+  if (durationSec === null || !Number.isFinite(durationSec) || durationSec <= 0) return maxFps;
+  const fps = Math.min(maxFps, maxFrames / durationSec);
   return Math.max(0.1, Math.round(fps * 1000) / 1000);
+}
+
+/** Twice the frames needed are taken from the video, to have sharp ones to choose from. */
+export const FRAME_OVERSAMPLE = 2;
+/** The frame rate that allows, at most. */
+export const MAX_CANDIDATE_FPS = 4;
+
+/**
+ * The sharpest frame of each stretch of the video, in order. A moving phone blurs many frames,
+ * and blurred frames are what most often breaks photogrammetry. At the same quality setting a
+ * sharper picture makes a larger JPEG, so the file size needs no image processing.
+ */
+export function pickSharpest<T extends { size: number }>(frames: readonly T[], max: number): T[] {
+  if (frames.length <= max) return [...frames];
+  if (max <= 0) return [];
+  const out: T[] = [];
+  for (let i = 0; i < max; i++) {
+    const from = Math.floor((i * frames.length) / max);
+    const to = Math.floor(((i + 1) * frames.length) / max);
+    let best = frames[from]!;
+    for (let k = from + 1; k < to; k++) if (frames[k]!.size > best.size) best = frames[k]!;
+    out.push(best);
+  }
+  return out;
 }
 
 /** Up to `max` items spread evenly over the list, first and last included. */

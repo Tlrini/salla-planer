@@ -18,7 +18,8 @@ type V3 = [number, number, number];
 /** Evening lights: one per chandelier, otherwise a row of ceiling lights along the hall. */
 export function lampPositions(
   hall: Pick<Hall, 'width' | 'length' | 'height' | 'kind' | 'outdoor'>,
-  items: readonly (Pick<Item, 'type' | 'x' | 'y'> & Partial<Pick<Item, 'width' | 'depth'>>)[],
+  items: readonly (Pick<Item, 'type' | 'x' | 'y'> &
+    Partial<Pick<Item, 'width' | 'depth' | 'height'>>)[],
 ): V3[] {
   const { width: W, length: L, height: H } = hall;
   if (isOpenAir(hall)) {
@@ -39,7 +40,12 @@ export function lampPositions(
   }
   const chandeliers = items.filter((i) => i.type === 'chandelier').slice(0, MAX_LAMPS);
   if (chandeliers.length) return chandeliers.map((c) => [c.x, Math.max(1.8, H - 1.6), c.y]);
-  const y = Math.max(1.8, H - 0.5);
+  // Below draped fabric: a lamp right against it would burn a white spot into the cloth.
+  const sag = Math.max(
+    0,
+    ...items.filter((i) => i.type === 'ceiling_drape').map((i) => i.height ?? 0.5),
+  );
+  const y = Math.max(1.8, H - 0.5 - sag);
   const long = Math.max(W, L);
   const count = Math.min(4, Math.max(2, Math.round(long / 8)));
   return Array.from({ length: count }, (_, i): V3 => {

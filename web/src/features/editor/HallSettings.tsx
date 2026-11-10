@@ -3,6 +3,7 @@ import {
   hallKindPatch,
   isNaturalGround,
   isOpenAir,
+  isRound,
   type FloorType,
   type HallKind,
 } from '@salla/shared';
@@ -19,6 +20,7 @@ export function HallSettings() {
   const kinds: HallKind[] = [
     'salle',
     'xham',
+    'rotonde',
     'tende',
     'jashte',
     ...(hall.shell ? ['skan' as const] : []),
@@ -37,24 +39,38 @@ export function HallSettings() {
         onCommit={(v) => v.trim() && update({ name: v.trim() })}
       />
       <div className="field-row three">
-        <NumberField
-          label={sq.hall.width}
-          value={hall.width}
-          decimals={1}
-          unit="m"
-          min={3}
-          max={200}
-          onCommit={(v) => v && update({ width: v })}
-        />
-        <NumberField
-          label={sq.hall.length}
-          value={hall.length}
-          decimals={1}
-          unit="m"
-          min={3}
-          max={200}
-          onCommit={(v) => v && update({ length: v })}
-        />
+        {isRound(hall) ? (
+          <NumberField
+            label={sq.hall.diameter}
+            value={hall.width}
+            decimals={1}
+            unit="m"
+            min={6}
+            max={100}
+            onCommit={(v) => v && update({ width: v, length: v })}
+          />
+        ) : (
+          <>
+            <NumberField
+              label={sq.hall.width}
+              value={hall.width}
+              decimals={1}
+              unit="m"
+              min={3}
+              max={200}
+              onCommit={(v) => v && update({ width: v })}
+            />
+            <NumberField
+              label={sq.hall.length}
+              value={hall.length}
+              decimals={1}
+              unit="m"
+              min={3}
+              max={200}
+              onCommit={(v) => v && update({ length: v })}
+            />
+          </>
+        )}
         <NumberField
           label={open ? sq.hall.lightsHeight : sq.hall.height}
           value={hall.height}

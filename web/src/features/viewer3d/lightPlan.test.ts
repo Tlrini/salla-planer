@@ -111,3 +111,12 @@ describe('outdoor light', () => {
     expect(bounceColor({ floor: 'parket', floorColor: '#123456' })).toBe('#123456');
   });
 });
+
+describe('lamps under draped fabric', () => {
+  const hall = { width: 20, length: 20, height: 5 };
+  it('hang below the lowest point of the fabric', () => {
+    const plain = lampPositions(hall, [])[0]![1];
+    const drape = { type: 'ceiling_drape', x: 10, y: 10, height: 1 };
+    expect(lampPositions(hall, [drape])[0]![1]).toBeCloseTo(plain - 1);
+  });
+});

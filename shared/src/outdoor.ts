@@ -13,9 +13,13 @@ export const isOpenAir = (h: Place): boolean =>
 /** The event itself is outside; a tent is, a glass pavilion is an inside place. */
 export const isOutdoor = (h: Place): boolean => isOpenAir(h) || h.kind === 'tende';
 /** The sky and the ground around the place can be seen, so the 3D view must show them. */
-export const seesSky = (h: Place): boolean => isOutdoor(h) || h.kind === 'xham';
+export const seesSky = (h: Place): boolean =>
+  isOutdoor(h) || h.kind === 'xham' || h.kind === 'rotonde';
 /** The places built as a frame with poles and a pitched fabric roof. */
-export const hasTentFrame = (h: Place): boolean => h.kind === 'tende' || h.kind === 'xham';
+export const hasTentFrame = (h: Place): boolean =>
+  h.kind === 'tende' || h.kind === 'xham' || h.kind === 'rotonde';
+/** The round glass pavilion: its plan is the circle inside the width × length square. */
+export const isRound = (h: Pick<Hall, 'kind'>): boolean => h.kind === 'rotonde';
 
 /** Natural ground keeps the colours of its photo; there is no colour to choose. */
 const NATURAL = new Set<FloorType>(['bar', 'guri', 'zhavorr', 'rere']);
@@ -32,15 +36,17 @@ export function groundOptions(h: Place): FloorType[] {
 
 /** The change of a hall to another kind, with a floor that makes sense there. */
 export function hallKindPatch(
-  hall: Pick<Hall, 'kind' | 'outdoor' | 'floor' | 'tent'>,
+  hall: Pick<Hall, 'kind' | 'outdoor' | 'floor' | 'tent'> & Partial<Pick<Hall, 'width' | 'length'>>,
   kind: HallKind,
 ): Partial<Hall> {
+  const diameter = Math.max(hall.width ?? 0, hall.length ?? 0);
   const next = { kind, outdoor: hall.outdoor };
   const fits = groundOptions(next).includes(hall.floor);
   const toGarden = kind === 'jashte' && hall.kind !== 'jashte';
   return {
     kind,
     ...(kind === 'tende' ? { tent: hall.tent ?? { openSides: false } } : {}),
+    ...(kind === 'rotonde' && diameter > 0 ? { width: diameter, length: diameter } : {}),
     ...(toGarden ? { floor: 'bar' as const } : fits ? {} : { floor: 'parket' as const }),
   };
 }
@@ -52,6 +58,8 @@ export const isCover = (type: string): boolean => COVER_TYPES.has(type);
 export const isOverhead = (type: string): boolean => isCanopy(type) || isCover(type);
 
 const NO_OPEN_AIR = new Set(['door', 'window', 'chandelier']);
+/** Flat panels that cannot sit on a curved glass wall. */
+const NO_ROUND = new Set(['door', 'window']);
 
 /** Catalog entries that make sense at this place. */
 export function catalogFor<T extends Pick<CatalogItem, 'id'>>(
@@ -59,7 +67,10 @@ export function catalogFor<T extends Pick<CatalogItem, 'id'>>(
   h: Place,
 ): T[] {
   return entries.filter(
-    (c) => !(isCover(c.id) && !isOutdoor(h)) && !(NO_OPEN_AIR.has(c.id) && isOpenAir(h)),
+    (c) =>
+      !(isCover(c.id) && !isOutdoor(h)) &&
+      !(NO_OPEN_AIR.has(c.id) && isOpenAir(h)) &&
+      !(NO_ROUND.has(c.id) && h.kind === 'rotonde'),
   );
 }
 
