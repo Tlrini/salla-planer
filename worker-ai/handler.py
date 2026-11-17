@@ -24,7 +24,8 @@ MODEL = os.environ.get("TRELLIS_MODEL", "microsoft/TRELLIS.2-4B")
 # '512' is several times faster and coarser; the comparison on the real GPU decides.
 PIPELINE_TYPE = os.environ.get("PIPELINE_TYPE", "1024_cascade")
 TARGET_FACES = int(os.environ.get("TARGET_FACES", "150000"))
-TEXTURE_SIZE = int(os.environ.get("TEXTURE_SIZE", "1024"))
+# The app keeps textures at 2048 px at most (tablets), so a larger texture would only cost time.
+TEXTURE_SIZE = int(os.environ.get("TEXTURE_SIZE", "2048"))
 
 
 class MitBackgroundRemover(rembg.BiRefNet):

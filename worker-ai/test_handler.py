@@ -104,7 +104,7 @@ class HandlerTest(unittest.TestCase):
             args, {"seed": 7, "preprocess_image": False, "pipeline_type": "1024_cascade"}
         )
         self.assertEqual(to_glb.call_args.kwargs["decimation_target"], 150000)
-        self.assertEqual(to_glb.call_args.kwargs["texture_size"], 1024)
+        self.assertEqual(to_glb.call_args.kwargs["texture_size"], 2048)
 
     def test_never_uses_the_non_commercial_background_remover(self):
         self.assertEqual(FakePipeline.instance.remover.model_name, "ZhengPeng7/BiRefNet")

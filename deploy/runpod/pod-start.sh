@@ -9,6 +9,15 @@
 # MESHROOM_URL_FALLBACK (a Meshroom .tar.gz if the image has none), UPDATE_WORKER=1.
 set -uo pipefail
 V=/workspace
+
+# Diagnostics: everything this script and the worker print also goes to /tmp/www/log.txt, served
+# on port 8000 (https://<pod id>-8000.proxy.runpod.net/log.txt) while the pod lives. It holds no
+# secrets: the worker token stays in the environment and is never printed.
+mkdir -p /tmp/www
+exec > >(tee -a /tmp/www/log.txt) 2>&1
+# Waits for python3 (in the image, or installed by setup below) instead of running apt itself.
+(until command -v python3 >/dev/null 2>&1; do sleep 5; done
+  cd /tmp/www && exec python3 -m http.server 8000 >/dev/null 2>&1) &
 REPO_URL="${REPO_URL:-https://github.com/Tlrini/salla-planer.git}"
 log() { echo "$(date -u +%FT%TZ) pod-start: $*"; }
 
@@ -17,7 +26,7 @@ setup() {
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq &&
     apt-get install -y -qq --no-install-recommends ca-certificates curl git xz-utils ffmpeg \
-      assimp-utils libgomp1 libgl1 libglib2.0-0 libxkbcommon0 >/dev/null || return 1
+      assimp-utils libgomp1 libgl1 libglib2.0-0 libxkbcommon0 python3-minimal >/dev/null || return 1
 
   if [ ! -x "$V/node/bin/node" ]; then
     log "installing Node.js 22"
@@ -58,7 +67,20 @@ setup() {
 }
 
 if setup; then
-  nvidia-smi --query-gpu=name,driver_version --format=csv,noheader || true
+  nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader || true
+  # Meshroom used a single core on RunPod: let OpenMP use every CPU this container may use.
+  cpus=$(nproc)
+  quota=$(cat /sys/fs/cgroup/cpu.max 2>/dev/null || echo unknown)
+  export OMP_NUM_THREADS="${OMP_NUM_THREADS:-$cpus}"
+  log "cpus=$cpus cgroup cpu.max=$quota OMP_NUM_THREADS=$OMP_NUM_THREADS"
+  log "meshroom_batch options: $("$MESHROOM_BATCH" --help 2>&1 | grep -oE -- '--[a-zA-Z]+' | sort -u | tr '\n' ' ')"
+  # Meshroom's per-step logs and a CPU/GPU snapshot every 30 s, served next to log.txt.
+  ln -sfn /tmp/MeshroomCache /tmp/www/cache
+  (while true; do
+     { date -u +%FT%TZ; nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv,noheader
+       top -b -n 1 -w 200 | sed -n '1,4p;7,14p'; } > /tmp/www/stats.tmp 2>&1
+     mv /tmp/www/stats.tmp /tmp/www/stats.txt; sleep 30
+   done) &
   log "starting the scan worker"
   cd "$V/worker" &&
     WORK_DIR=/tmp/work IDLE_EXIT_MINUTES=60 node dist/main.js

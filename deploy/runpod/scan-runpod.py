@@ -122,6 +122,8 @@ def create_pod(env, key):
         # Override the image's own entrypoint so only our start script runs.
         "entrypoint": ["/bin/bash", "-c"],
         "cmd": [script],
+        # pod-start.sh serves its log here for diagnostics (no secrets in it).
+        "ports": ["8000/http"],
     }
     if volume:
         clouds = ["SECURE"]
