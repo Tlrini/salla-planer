@@ -6,7 +6,7 @@ import { buildGlb, extractFrames, reconstruct } from './pipeline.js';
 import {
   expectedMinutes,
   failureText,
-  frameWidthFor,
+  FRAME_WIDTH,
   framesFor,
   reconstructProgress,
   triangleBudget,
@@ -107,7 +107,7 @@ async function processJob(api: WorkerApi, job: Claim): Promise<void> {
         path.join(inputDir, job.files[0]!),
         imagesDir,
         framesFor(quality, purpose),
-        frameWidthFor(quality),
+        FRAME_WIDTH,
       );
       log(`job ${job.id}: ${frames} frames`);
     }

@@ -8,14 +8,21 @@ export const MAX_FPS = 2;
 export type ScanQuality = 'quick' | 'detailed';
 export type ScanPurpose = 'decor' | 'hall';
 
-/** Frames that go into photogrammetry: a whole hall needs more than one decoration. */
+/**
+ * Frames that go into photogrammetry: a whole hall needs more than one decoration. 80 frames gave
+ * a poor first decor scan (2026-11-17); phone browser video needs more overlap.
+ */
 export function framesFor(quality: ScanQuality, purpose: ScanPurpose): number {
   if (quality === 'detailed') return MAX_FRAMES;
-  return purpose === 'hall' ? 120 : 80;
+  return purpose === 'hall' ? 160 : 150;
 }
 
-/** Width the frames are scaled down to. */
-export const frameWidthFor = (quality: ScanQuality): number => (quality === 'quick' ? 1280 : 1920);
+/**
+ * Width the frames are scaled down to. Browser video is already soft; shrinking quick scans to
+ * 1280 px lost too much detail, so both qualities keep 1920 px (quick differs by frame count and
+ * Meshroom settings: MESHROOM_PARAMS_QUICK).
+ */
+export const FRAME_WIDTH = 1920;
 
 /** Triangles of the final model: a quick scan keeps 60 % of the detailed budget. */
 export const triangleBudget = (quality: ScanQuality, detailed: number): number =>

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   failureText,
   expectedMinutes,
-  frameWidthFor,
+  FRAME_WIDTH,
   framesFor,
   triangleBudget,
   framesPerSecond,
@@ -76,12 +76,12 @@ describe('scan worker plan', () => {
 });
 
 describe('scan quality', () => {
-  it('uses fewer, smaller frames for a quick scan', () => {
-    expect(framesFor('quick', 'decor')).toBe(80);
-    expect(framesFor('quick', 'hall')).toBe(120);
+  it('uses fewer frames for a quick scan, all at full HD width', () => {
+    expect(framesFor('quick', 'decor')).toBe(150);
+    expect(framesFor('quick', 'hall')).toBe(160);
     expect(framesFor('detailed', 'decor')).toBe(200);
-    expect(frameWidthFor('quick')).toBe(1280);
-    expect(frameWidthFor('detailed')).toBe(1920);
+    expect(framesFor('quick', 'decor')).toBeLessThan(framesFor('detailed', 'decor'));
+    expect(FRAME_WIDTH).toBe(1920);
   });
   it('keeps less geometry and expects less time', () => {
     expect(triangleBudget('quick', 150_000)).toBe(90_000);
