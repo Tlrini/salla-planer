@@ -227,6 +227,15 @@ def main():
             state.setdefault("pods", {}).setdefault(p["id"], now)
             alive.append(p)
 
+    # Never more than one worker pod: a create request that RunPod queued for capacity, or a run
+    # that overlapped another, can leave an extra one. Keep the oldest (it may hold a claimed scan).
+    alive.sort(key=lambda p: state.get("pods", {}).get(p["id"], now))
+    for extra in alive[1:]:
+        http("DELETE", f"{API}/pods/{extra['id']}", key)
+        state.get("pods", {}).pop(extra["id"], None)
+        log(f"deleted pod {extra['id']} (a second worker pod; only one may run)")
+    alive = alive[:1]
+
     if pending > 0 and not alive:
         if os.path.exists(os.path.join(ROOT, "RUNPOD_PAUSED")):
             log(f"{pending} scan(s) waiting, but {ROOT}/RUNPOD_PAUSED exists: not starting a GPU")
@@ -250,4 +259,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # One run at a time: a slow run (many GPU types tried) must not overlap the next cron minute.
+    import fcntl
+    lock = open(STATE + ".lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        sys.exit(0)
     sys.exit(main())

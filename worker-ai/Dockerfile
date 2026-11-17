@@ -19,8 +19,10 @@ RUN apt-get update \
   && git -C /app checkout 75fbf0183001ed9876c8dbb35de6b68552ee08bd \
   && git -C /app submodule update --init --recursive
 
+# transformers is pinned: TRELLIS.2 iterates DINOv3ViTModel.layer, which newer releases renamed
+# ("'DINOv3ViTModel' object has no attribute 'layer'" on the first real job, 2026-11-17).
 RUN pip install --no-cache-dir imageio imageio-ffmpeg tqdm easydict opencv-python-headless ninja \
-    trimesh transformers tensorboard pandas lpips zstandard kornia timm pillow-simd runpod==2.2.0 \
+    trimesh transformers==4.56.2 tensorboard pandas lpips zstandard kornia timm pillow-simd runpod==2.2.0 \
     git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
 
 # 2.7.4.post1 is the first flash-attn release with a prebuilt wheel for PyTorch 2.6; an older pin
