@@ -7,6 +7,7 @@ The rest of this file follows the model's own README and app.py, but has not bee
 GPU yet: see README.md.
 """
 import base64
+import gc
 import io
 import os
 import tempfile
@@ -24,6 +25,10 @@ MODEL = os.environ.get("TRELLIS_MODEL", "microsoft/TRELLIS.2-4B")
 # '512' is several times faster and coarser; the comparison on the real GPU decides.
 PIPELINE_TYPE = os.environ.get("PIPELINE_TYPE", "1024_cascade")
 TARGET_FACES = int(os.environ.get("TARGET_FACES", "150000"))
+# The model's example keeps up to 16.7 M faces (nvdiffrast's limit) before the GLB step, sized for
+# 80 GB GPUs; on 24 GB the GLB simplification then ran out of memory (2026-11-18). A first cut to
+# 1 M faces keeps the detail the final 150 k faces can show.
+PRE_SIMPLIFY_FACES = int(os.environ.get("PRE_SIMPLIFY_FACES", "1000000"))
 # The app keeps textures at 2048 px at most (tablets), so a larger texture would only cost time.
 TEXTURE_SIZE = int(os.environ.get("TEXTURE_SIZE", "2048"))
 
@@ -52,6 +57,28 @@ def read_photo(data):
         return None
 
 
+def free_gpu():
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+def export_glb(mesh):
+    return o_voxel.postprocess.to_glb(
+        vertices=mesh.vertices,
+        faces=mesh.faces,
+        attr_volume=mesh.attrs,
+        coords=mesh.coords,
+        attr_layout=mesh.layout,
+        voxel_size=mesh.voxel_size,
+        aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
+        decimation_target=TARGET_FACES,
+        texture_size=TEXTURE_SIZE,
+        remesh=True,
+        remesh_band=1,
+        remesh_project=0,
+    )
+
+
 def handler(job):
     job_input = job.get("input", {})
     data = job_input.get("image")
@@ -74,21 +101,21 @@ def handler(job):
             preprocess_image=False,
             pipeline_type=PIPELINE_TYPE,
         )[0]
-        mesh.simplify(16777216)  # nvdiffrast limit
-        model = o_voxel.postprocess.to_glb(
-            vertices=mesh.vertices,
-            faces=mesh.faces,
-            attr_volume=mesh.attrs,
-            coords=mesh.coords,
-            attr_layout=mesh.layout,
-            voxel_size=mesh.voxel_size,
-            aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-            decimation_target=TARGET_FACES,
-            texture_size=TEXTURE_SIZE,
-            remesh=True,
-            remesh_band=1,
-            remesh_project=0,
-        )
+        free_gpu()
+        mesh.simplify(PRE_SIMPLIFY_FACES)
+        free_gpu()
+        try:
+            model = export_glb(mesh)
+        except RuntimeError as err:
+            if "out of memory" not in str(err):
+                raise
+            # Still too big: move the model weights off the GPU for the export, then back.
+            pipeline.cpu()
+            free_gpu()
+            try:
+                model = export_glb(mesh)
+            finally:
+                pipeline.cuda()
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "model.glb")
             model.export(path)

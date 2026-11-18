@@ -41,6 +41,12 @@ class FakePipeline:
         return cls.instance
 
     def cuda(self):
+        self.on_gpu = True
+        return self
+
+    def cpu(self):
+        self.on_gpu = False
+        self.moved_to_cpu = getattr(self, "moved_to_cpu", 0) + 1
         return self
 
     def preprocess_image(self, image):
@@ -51,7 +57,8 @@ class FakePipeline:
 
     def run(self, image, **kwargs):
         self.run_args = kwargs
-        return [FakeMesh()]
+        self.mesh = FakeMesh()
+        return [self.mesh]
 
 
 class FakeGlb:
@@ -92,6 +99,26 @@ class HandlerTest(unittest.TestCase):
     def setUp(self):
         FakePipeline.fail_preprocess = False
         to_glb.reset_mock()
+        to_glb.side_effect = None
+        to_glb.return_value = FakeGlb()
+
+    def test_cuts_the_mesh_down_before_the_glb_step(self):
+        handler.handler({"input": {"image": photo()}})
+        self.assertEqual(FakePipeline.instance.mesh.limit, 1_000_000)
+
+    def test_retries_the_glb_step_without_the_weights_on_the_gpu(self):
+        FakePipeline.instance.moved_to_cpu = 0
+        to_glb.side_effect = [RuntimeError("[CuMesh] CUDA error: out of memory"), FakeGlb()]
+        out = handler.handler({"input": {"image": photo()}})
+        self.assertEqual(base64.b64decode(out["glb"]), b"glTF-model")
+        self.assertEqual(FakePipeline.instance.moved_to_cpu, 1)
+        self.assertTrue(FakePipeline.instance.on_gpu)
+
+    def test_other_glb_errors_are_not_retried(self):
+        to_glb.side_effect = RuntimeError("something else")
+        with self.assertRaises(RuntimeError):
+            handler.handler({"input": {"image": photo()}})
+        self.assertEqual(to_glb.call_count, 1)
 
     def test_returns_the_model(self):
         out = handler.handler({"input": {"image": photo()}})
