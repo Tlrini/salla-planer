@@ -61,10 +61,55 @@ class FakePipeline:
         return [self.mesh]
 
 
+def make_glb(texture_side=64):
+    """A real minimal GLB: one PNG texture (noise, so it does not compress away) + 36 bytes of
+    vertex data in another buffer view."""
+    import json
+    import random
+    import struct
+
+    random.seed(1)
+    picture = Image.frombytes(
+        "RGBA", (texture_side, texture_side),
+        bytes(random.randrange(256) for _ in range(texture_side * texture_side * 4)),
+    )
+    png = io.BytesIO()
+    picture.save(png, "PNG")
+    png = png.getvalue()
+    vertices = bytes(range(36))
+    pad = lambda b, f=b"\0": b + f * (-len(b) % 4)  # noqa: E731
+    binary = pad(vertices) + png
+    doc = {
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": len(pad(binary))}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(vertices)},
+            {"buffer": 0, "byteOffset": len(pad(vertices)), "byteLength": len(png)},
+        ],
+        "images": [{"bufferView": 1, "mimeType": "image/png"}],
+    }
+    js = pad(json.dumps(doc).encode(), b" ")
+    binary = pad(binary)
+    chunks = struct.pack("<I4s", len(js), b"JSON") + js + struct.pack("<I4s", len(binary), b"BIN\0") + binary
+    return struct.pack("<4sII", b"glTF", 2, 12 + len(chunks)) + chunks
+
+
+def read_glb(glb):
+    import json
+    import struct
+
+    json_len = struct.unpack_from("<I", glb, 12)[0]
+    doc = json.loads(glb[20:20 + json_len])
+    bin_len = struct.unpack_from("<I", glb, 20 + json_len)[0]
+    binary = glb[28 + json_len:28 + json_len + bin_len]
+    assert struct.unpack_from("<I", glb, 8)[0] == len(glb)
+    return doc, binary
+
+
 class FakeGlb:
     def export(self, path):
         with open(path, "wb") as f:
-            f.write(b"glTF-model")
+            f.write(make_glb())
 
 
 rembg_module = types.SimpleNamespace(BiRefNet=FakeRemover)
@@ -110,7 +155,7 @@ class HandlerTest(unittest.TestCase):
         FakePipeline.instance.moved_to_cpu = 0
         to_glb.side_effect = [RuntimeError("[CuMesh] CUDA error: out of memory"), FakeGlb()]
         out = handler.handler({"input": {"image": photo()}})
-        self.assertEqual(base64.b64decode(out["glb"]), b"glTF-model")
+        self.assertEqual(base64.b64decode(out["glb"])[:4], b"glTF")
         self.assertEqual(FakePipeline.instance.moved_to_cpu, 1)
         self.assertTrue(FakePipeline.instance.on_gpu)
 
@@ -122,7 +167,28 @@ class HandlerTest(unittest.TestCase):
 
     def test_returns_the_model(self):
         out = handler.handler({"input": {"image": photo()}})
-        self.assertEqual(base64.b64decode(out["glb"]), b"glTF-model")
+        doc, _ = read_glb(base64.b64decode(out["glb"]))
+        self.assertEqual(doc["images"][0]["mimeType"], "image/jpeg")
+
+    def test_textures_become_jpeg_and_other_data_is_kept(self):
+        doc, binary = read_glb(handler.shrink_glb(make_glb()))
+        img = doc["bufferViews"][1]
+        self.assertEqual(binary[img["byteOffset"]:img["byteOffset"] + 2], b"\xff\xd8")
+        self.assertEqual(Image.open(io.BytesIO(binary[img["byteOffset"]:img["byteOffset"] + img["byteLength"]])).size, (64, 64))
+        vtx = doc["bufferViews"][0]
+        self.assertEqual(binary[vtx["byteOffset"]:vtx["byteOffset"] + vtx["byteLength"]], bytes(range(36)))
+        self.assertEqual(doc["buffers"][0]["byteLength"], len(binary))
+        self.assertEqual(img["byteOffset"] % 4, 0)
+
+    def test_textures_shrink_until_the_output_fits(self):
+        big = make_glb(512)
+        with mock.patch.object(handler, "MAX_OUTPUT_CHARS", 60_000):
+            encoded = handler.small_enough_glb(big)
+        self.assertLessEqual(len(encoded), 60_000)
+        doc, binary = read_glb(base64.b64decode(encoded))
+        img = doc["bufferViews"][1]
+        side = Image.open(io.BytesIO(binary[img["byteOffset"]:img["byteOffset"] + img["byteLength"]])).size[0]
+        self.assertLess(side, 512)
 
     def test_uses_the_settings(self):
         handler.handler({"input": {"image": photo(), "seed": 7}})
